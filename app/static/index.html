@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Queeree — AI Search</title>
+    <meta name="description" content="Queeree — cute AI-powered search" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+
+    <!-- Search Section -->
+    <div class="search-wrapper" id="searchWrapper">
+      <div class="logo" id="logo">
+        <h1>Queeree<span class="dot"></span></h1>
+        <p class="subtitle">ask anything, get answers ✨</p>
+      </div>
+
+      <div class="search-container">
+        <div class="search-bar">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input
+            type="text"
+            id="searchInput"
+            placeholder="What do you want to know?"
+            autocomplete="off"
+          />
+          <button class="search-btn" id="searchBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+            Ask
+          </button>
+        </div>
+        <div class="loading-bar-track" id="loadingBar">
+          <div class="loading-bar-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Result Section -->
+    <div class="result-area" id="resultArea"></div>
+
+    <div class="footer" id="footer" style="display: none;">
+      powered by <a href="https://openrouter.ai" target="_blank">OpenRouter</a> &amp; Sanic
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
