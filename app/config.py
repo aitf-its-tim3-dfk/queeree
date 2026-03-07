@@ -15,6 +15,7 @@ DEFAULT_CONFIG = {
     "fact_checker_n_samples": 3,
     "fact_checker_max_loops": 3,
     "max_completion_tokens": 1024,
+    "verbose_logging": os.getenv("VERBOSE_LOGGING", "false").lower() == "true",
 }
 
 
@@ -29,6 +30,7 @@ class PipelineConfig(BaseModel):
     fact_checker_n_samples: Optional[int] = None
     fact_checker_max_loops: Optional[int] = None
     max_completion_tokens: Optional[int] = None
+    verbose_logging: Optional[bool] = None
 
 
 # state for the current async context only

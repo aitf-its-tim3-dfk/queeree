@@ -47,6 +47,9 @@ async def _classify_single(
             )
 
             content_str = response.choices[0].message.content
+            if config.get_config_val("verbose_logging"):
+                print(f"[VERBOSE - Classifier] LLM Response: {content_str}")
+                
             if content_str is None:
                 raise ValueError("Model returned None content")
             

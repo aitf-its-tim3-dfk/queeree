@@ -42,6 +42,9 @@ async def _check_sufficiency_single(
                 max_completion_tokens=config.get_config_val("max_completion_tokens"),
             )
             content_str = response.choices[0].message.content
+            if config.get_config_val("verbose_logging"):
+                print(f"[VERBOSE - FactChecker Sufficiency] LLM Response: {content_str}")
+                
             if content_str is None:
                 raise ValueError("Model returned None content")
                 
@@ -119,6 +122,9 @@ async def generate_query(client: AsyncOpenAI, prompt: str, content: str) -> str:
                 max_completion_tokens=config.get_config_val("max_completion_tokens"),
             )
             content_str = res.choices[0].message.content
+            if config.get_config_val("verbose_logging"):
+                print(f"[VERBOSE - FactChecker Query] LLM Response: {content_str}")
+                
             if content_str is None:
                 raise ValueError("Model returned None content")
                 

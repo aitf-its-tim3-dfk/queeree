@@ -62,6 +62,9 @@ async def _analyze_text_single(client: AsyncOpenAI, content: str, law: Dict[str,
                 max_completion_tokens=config.get_config_val("max_completion_tokens"),
             )
             content_str = response.choices[0].message.content
+            if config.get_config_val("verbose_logging"):
+                print(f"[VERBOSE - TextLaw] LLM Response: {content_str}")
+                
             if content_str is None:
                 raise ValueError("Model returned None content")
             
@@ -79,7 +82,7 @@ async def analyze_text_laws(client: AsyncOpenAI, content: str, laws: List[Dict[s
     # default N=3 for consistency
     n_samples = config.get_config_val("classifier_n_samples") or 3
     
-    for law in laws:
+    async def process_law(law):
         if emit_progress:
             await emit_progress({"stage": "processing", "message": f"Menganalisis hukum {law['pasal']} pada teks..."})
             
@@ -140,14 +143,15 @@ async def analyze_text_laws(client: AsyncOpenAI, content: str, laws: List[Dict[s
                 "reason": g["reasons"][0] if g["reasons"] else ""
             })
             
-        analyzed_laws.append({
+        return {
             "pasal": law["pasal"],
             "description": law["description"],
             "segments": final_segments,
             "overall_reason": overall_reasons[0] if overall_reasons else ""
-        })
-        
-    return analyzed_laws
+        }
+
+    tasks = [process_law(law) for law in laws]
+    return await asyncio.gather(*tasks)
 
 async def _analyze_image_single(client: AsyncOpenAI, content: str, image_data: Dict[str, Any], law: Dict[str, str], run_idx: int) -> Dict[str, Any]:
     b64_image = base64.b64encode(image_data["bytes"]).decode("utf-8")
@@ -185,6 +189,9 @@ async def _analyze_image_single(client: AsyncOpenAI, content: str, image_data: D
                 max_completion_tokens=config.get_config_val("max_completion_tokens"),
             )
             content_str = res.choices[0].message.content
+            if config.get_config_val("verbose_logging"):
+                print(f"[VERBOSE - ImageLaw single] LLM Response: {content_str}")
+                
             if content_str is None:
                 raise ValueError("Model returned None content")
             
@@ -201,7 +208,7 @@ async def analyze_image_laws(client: AsyncOpenAI, content: str, image_data: Dict
     
     n_samples = config.get_config_val("classifier_n_samples") or 3
     
-    for law in laws:
+    async def process_law(law):
         if emit_progress:
             await emit_progress({"stage": "processing", "message": f"Menganalisis gambar untuk hukum {law['pasal']}..."})
             
@@ -210,7 +217,7 @@ async def analyze_image_laws(client: AsyncOpenAI, content: str, image_data: Dict
         
         valid_reasons = [r["reason"] for r in results if r["reason"]]
         if not valid_reasons:
-            continue
+            return None
             
         # cluster reasons
         reason_list_text = "\n".join([f"- {r}" for r in valid_reasons])
@@ -245,6 +252,9 @@ async def analyze_image_laws(client: AsyncOpenAI, content: str, image_data: Dict
                     max_completion_tokens=config.get_config_val("max_completion_tokens"),
                 )
                 content_str = cluster_res.choices[0].message.content
+                if config.get_config_val("verbose_logging"):
+                    print(f"[VERBOSE - ImageLaw Cluster] LLM Response: {content_str}")
+                    
                 if content_str is None:
                     raise ValueError("Model returned None content")
                 cluster_data = json.loads(content_str.strip())
@@ -286,6 +296,9 @@ async def analyze_image_laws(client: AsyncOpenAI, content: str, image_data: Dict
                     max_completion_tokens=config.get_config_val("max_completion_tokens"),
                 )
                 content_str = final_res.choices[0].message.content
+                if config.get_config_val("verbose_logging"):
+                    print(f"[VERBOSE - ImageLaw Final] LLM Response: {content_str}")
+                    
                 if content_str is None:
                     raise ValueError("Model returned None content")
                 final_data = json.loads(content_str.strip())
@@ -297,12 +310,14 @@ async def analyze_image_laws(client: AsyncOpenAI, content: str, image_data: Dict
                     final_reason = "Error generating final reason."
                 await asyncio.sleep(1)
             
-        analyzed_laws.append({
+        return {
             "pasal": law["pasal"],
             "description": law["description"],
             "segments": [],
             "overall_reason": final_reason,
             "clustered_reason_counts": clustered
-        })
-        
-    return analyzed_laws
+        }
+
+    tasks = [process_law(law) for law in laws]
+    results = await asyncio.gather(*tasks)
+    return [r for r in results if r is not None]
