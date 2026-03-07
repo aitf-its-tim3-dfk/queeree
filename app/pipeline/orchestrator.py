@@ -48,7 +48,7 @@ async def analyze_content(
                 }
             )
 
-        task_laws = retrieve_laws(client, content, categories, search_queue)
+        task_laws = retrieve_laws(client, content, categories)
 
         # Only fact-check if Disinformasi or Hoaks
         needs_fact_check = "Disinformasi" in categories or "Hoaks" in categories
@@ -61,10 +61,9 @@ async def analyze_content(
 
             task_fact = fact_check(client, content, search_queue, fc_progress)
 
-            # Await both
-            laws_summary, fc_result = await __import__("asyncio").gather(
-                task_laws, task_fact
-            )
+            fc_result = await task_fact
+            laws_summary = await task_laws
+            
             result["laws_summary"] = laws_summary
             result["fact_check"] = fc_result
 

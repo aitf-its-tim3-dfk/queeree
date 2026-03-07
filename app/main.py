@@ -6,11 +6,13 @@ from sanic.response import json as json_response, file
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from pipeline import analyze_content, search_queue
+from pipeline.law_retriever import local_law_retriever
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = Sanic("OpenRouterApp")
+app.config.RESPONSE_TIMEOUT = 300
 
 # Serve the static UI files (HTML, CSS, JS)
 app.static("/static", "./static")
@@ -25,7 +27,8 @@ client = AsyncOpenAI(
 
 @app.before_server_start
 async def setup(app, loop):
-    """Initialize background tasks like the search queue."""
+    """Initialize background tasks and pre-load heavy models."""
+    local_law_retriever.load()
     await search_queue.start()
 
 

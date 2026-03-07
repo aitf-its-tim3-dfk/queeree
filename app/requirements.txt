@@ -2,3 +2,6 @@ sanic
 python-dotenv
 openai
 httpx
+sentence-transformers
+hnswlib
+numpy

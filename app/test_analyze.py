@@ -4,7 +4,7 @@ import asyncio
 
 
 async def test():
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=300.0) as client:
         # Hit the actual server we just started
         content = "Ini berita hoaks! Uang Rp 100 ribu di dalamnya ada microchip yang bisa melacak kita!"
         print(f"Testing point /api/analyze with content:\n{content}\n")
