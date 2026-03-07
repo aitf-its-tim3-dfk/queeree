@@ -5,9 +5,9 @@ import hnswlib
 from openai import AsyncOpenAI
 from sentence_transformers import SentenceTransformer
 
-from .prompts import LAW_QUERY_PROMPT
+from .prompts import LAW_QUERY_PROMPT, LAW_SUMMARY_PROMPT
 
-MODEL_NAME = "qwen/qwen3.5-27b"
+MODEL_NAME = "qwen/qwen3.5-35b-a3b"
 EMBED_MODEL_NAME = "perplexity-ai/pplx-embed-v1-0.6B"
 
 
@@ -96,6 +96,7 @@ async def retrieve_laws(
     client: AsyncOpenAI,
     content: str,
     categories: list[str],
+    emit_progress=None,
 ) -> str:
     """Finds and formats relevant Indonesian laws using local hnswlib index, returning a Markdown string."""
     if not categories:
@@ -104,6 +105,11 @@ async def retrieve_laws(
     cats_str = ", ".join(categories)
 
     # 1. Ask LLM to generate search query
+    if emit_progress:
+        await emit_progress(
+            {"stage": "law_retrieval", "message": "Menyiapkan kueri pencarian pasal..."}
+        )
+
     try:
         res = await client.chat.completions.create(
             model=MODEL_NAME,
@@ -114,14 +120,33 @@ async def retrieve_laws(
                     "content": f"Categories: {cats_str}\n\nContent snippet: {content[:500]}",
                 },
             ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "law_query",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}},
+                        "required": ["query"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
             temperature=0.1,
         )
-        query = res.choices[0].message.content.strip()
+        data = json.loads(res.choices[0].message.content)
+        query = data.get("query", cats_str)
     except Exception as e:
         print(f"Law query generation error: {e}")
-        return "Gagal menghasilkan pencarian hukum (Error in LLM)."
+        query = cats_str  # Fallback to categories
 
     # 2. Run retrieval
+    if emit_progress:
+        await emit_progress(
+            {"stage": "law_retrieval", "message": f"Mencari pasal untuk: {query}..."}
+        )
+
     try:
         results = local_law_retriever.retrieve_top_k(query, k=5)
     except Exception as e:
@@ -131,28 +156,59 @@ async def retrieve_laws(
     if not results:
         return f"*(Dicari: {query})*\nTidak ditemukan pasal hukum secara spesifik."
 
-    # 3. Format raw results into readable text
-    laws_prompt = """Based on the search results provided, summarize the core Indonesian laws (Undang-Undang, KUHP, UU ITE, dsb) that relate to the offense categories provided.
-    Format your response in simple Markdown, answering directly in Indonesian. Cite the pasal (article numbers) clearly.
-    Do not hallucinate laws not mentioned in the typical context of these search results.
-    """
+    if emit_progress:
+        await emit_progress(
+            {
+                "stage": "law_retrieval",
+                "message": f"Ditemukan {len(results)} pasal hukum. Merangkum...",
+            }
+        )
 
+    # 3. Format raw results into readable text
     search_context = "\n".join([f"- {r['pasal']}: {r['description']}" for r in results])
 
     try:
         final_res = await client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": laws_prompt},
+                {"role": "system", "content": LAW_SUMMARY_PROMPT},
                 {
                     "role": "user",
                     "content": f"Categories: {cats_str}\n\nSearch Results:\n{search_context}",
                 },
             ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "law_summary",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "summary": {"type": "string"},
+                            "articles": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "pasal": {"type": "string"},
+                                        "description": {"type": "string"},
+                                    },
+                                    "required": ["pasal", "description"],
+                                    "additionalProperties": False,
+                                },
+                            },
+                        },
+                        "required": ["summary", "articles"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
             temperature=0.2,
         )
-        laws_summary = final_res.choices[0].message.content.strip()
-        return laws_summary
+        summary_data = json.loads(final_res.choices[0].message.content)
+        return summary_data.get("summary", "")
     except Exception as e:
         print(f"Law summarization error: {e}")
         return "Gagal merangkum hukum (Error in LLM)."
+

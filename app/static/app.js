@@ -1,6 +1,9 @@
 const searchWrapper = document.getElementById("searchWrapper");
 const searchInput = document.getElementById("searchInput");
 const searchBtn = document.getElementById("searchBtn");
+const uploadBtn = document.getElementById("uploadBtn");
+const imageInput = document.getElementById("imageInput");
+const imagePreview = document.getElementById("imagePreview");
 const loadingBar = document.getElementById("loadingBar");
 const resultArea = document.getElementById("resultArea");
 const resultContent = document.getElementById("resultContent");
@@ -10,11 +13,13 @@ const footer = document.getElementById("footer");
 
 let hasResult = false;
 let currentAbortController = null;
+let selectedFile = null;
 
 function setLoading(show) {
   loadingBar.classList.toggle("active", show);
   searchBtn.disabled = show;
   searchInput.disabled = show;
+  uploadBtn.disabled = show;
 }
 
 function resetUI() {
@@ -23,6 +28,32 @@ function resetUI() {
   progressStepper.style.display = "block";
   statusMessage.textContent = "Menunggu...";
 }
+
+// Image handling
+uploadBtn.addEventListener("click", () => imageInput.click());
+
+imageInput.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    selectedFile = file;
+    const reader = new FileReader();
+    reader.onload = (re) => {
+      imagePreview.style.display = "block";
+      imagePreview.innerHTML = `
+        <img src="${re.target.result}" alt="Preview">
+        <button class="remove-img-btn" onclick="removeImage()">✕</button>
+      `;
+    };
+    reader.readAsDataURL(file);
+  }
+});
+
+window.removeImage = function() {
+  selectedFile = null;
+  imageInput.value = "";
+  imagePreview.style.display = "none";
+  imagePreview.innerHTML = "";
+};
 
 function renderBadge(text, isDanger) {
   return `<span class="badge ${isDanger ? "danger" : "safe"}">${escapeHtml(
@@ -143,9 +174,21 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function mapStage(stage) {
+  const map = {
+    classifying: "Klasifikasi",
+    fact_checking: "Cek Fakta",
+    law_retrieval: "Yurisprudensi",
+    processing: "Analisis",
+    done: "Selesai",
+    error: "Error"
+  };
+  return map[stage] || stage;
+}
+
 async function doAnalyze() {
   const content = searchInput.value.trim();
-  if (!content) return;
+  if (!content && !selectedFile) return;
 
   if (currentAbortController) {
     currentAbortController.abort();
@@ -162,10 +205,15 @@ async function doAnalyze() {
   resetUI();
 
   try {
+    const formData = new FormData();
+    formData.append("content", content);
+    if (selectedFile) {
+      formData.append("image", selectedFile);
+    }
+
     const response = await fetch("/api/analyze", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
+      body: formData,
       signal: currentAbortController.signal,
     });
 
@@ -190,7 +238,9 @@ async function doAnalyze() {
           try {
             const payload = JSON.parse(line.substring(6));
             if (payload.type === "progress") {
-              statusMessage.textContent = payload.data.message;
+              const { stage, message } = payload.data;
+              const stageLabel = `<span class="stage-label">${mapStage(stage)}</span>`;
+              statusMessage.innerHTML = `${stageLabel} ${escapeHtml(message)}`;
             } else if (payload.type === "result") {
               progressStepper.style.display = "none";
               renderFinalResult(payload.data);
@@ -222,3 +272,4 @@ searchInput.addEventListener("keydown", (e) => {
 });
 
 searchInput.focus();
+

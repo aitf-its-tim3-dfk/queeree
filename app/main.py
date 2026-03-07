@@ -47,11 +47,23 @@ async def index(request):
 @app.post("/api/analyze")
 async def analyze_endpoint(request):
     """Receives content from UI, runs the moderation pipeline, and streams back progress."""
-    data = request.json
-    content = data.get("content")
+    # Support both JSON and Multipart Form Data
+    if request.content_type.startswith("multipart/form-data"):
+        content = request.form.get("content", "")
+        image_file = request.files.get("image")
+        image_data = None
+        if image_file:
+            image_data = {
+                "bytes": image_file.body,
+                "mime_type": image_file.type,
+            }
+    else:
+        data = request.json or {}
+        content = data.get("content", "")
+        image_data = None
 
-    if not content:
-        return json_response({"error": "Content is required"}, status=400)
+    if not content and not image_data:
+        return json_response({"error": "Content or image is required"}, status=400)
 
     res = await request.respond(content_type="text/event-stream")
 
@@ -65,7 +77,7 @@ async def analyze_endpoint(request):
 
     try:
         final_result = await analyze_content(
-            client, content, emit_progress=progress_callback
+            client, content, image_data=image_data, emit_progress=progress_callback
         )
         await res.send(
             f"data: {json.dumps({'type': 'result', 'data': final_result})}\n\n"
@@ -74,6 +86,7 @@ async def analyze_endpoint(request):
         await res.send(f"data: {json.dumps({'type': 'error', 'data': str(e)})}\n\n")
 
     await res.eof()
+
 
 
 if __name__ == "__main__":

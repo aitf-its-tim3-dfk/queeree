@@ -10,7 +10,10 @@ from .retrieval import RetrievalQueue, search_queue
 
 
 async def analyze_content(
-    client: AsyncOpenAI, content: str, emit_progress: Callable = None
+    client: AsyncOpenAI,
+    content: str,
+    image_data: Dict[str, Any] = None,
+    emit_progress: Callable = None,
 ) -> Dict[str, Any]:
     """
     Main orchestration logic for the content moderation pipeline.
@@ -26,10 +29,12 @@ async def analyze_content(
         # Step 1: Classification
         if emit_progress:
             await emit_progress(
-                {"stage": "classifying", "message": "Klasifikasi konten..."}
+                {"stage": "classifying", "message": "Menganalisis konten..."}
             )
 
-        categories = await classify_content(client, content)
+        categories = await classify_content(
+            client, content, image_data=image_data, emit_progress=emit_progress
+        )
         result["categories"] = categories
 
         if not categories:
@@ -44,11 +49,13 @@ async def analyze_content(
             await emit_progress(
                 {
                     "stage": "processing",
-                    "message": f"Ditemukan pelanggaran: {', '.join(categories)}. Mengumpulkan bukti...",
+                    "message": f"Terdeteksi: {', '.join(categories)}. Mengumpulkan bukti...",
                 }
             )
 
-        task_laws = retrieve_laws(client, content, categories)
+        task_laws = retrieve_laws(
+            client, content, categories, emit_progress=emit_progress
+        )
 
         # Only fact-check if Disinformasi or Hoaks
         needs_fact_check = "Disinformasi" in categories or "Hoaks" in categories
@@ -63,7 +70,7 @@ async def analyze_content(
 
             fc_result = await task_fact
             laws_summary = await task_laws
-            
+
             result["laws_summary"] = laws_summary
             result["fact_check"] = fc_result
 
@@ -96,3 +103,4 @@ async def analyze_content(
             )
         result["error"] = str(e)
         return result
+

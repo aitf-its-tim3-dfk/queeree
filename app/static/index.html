@@ -30,9 +30,12 @@
             autocomplete="off"
             rows="4"
           ></textarea>
+          <!-- Image preview container -->
+          <div id="imagePreview" class="image-preview" style="display: none;"></div>
+          
           <div class="input-actions">
-            <!-- Upload placeholder button for UI parity -->
-            <button class="icon-btn tooltip" data-tooltip="Upload Media (Coming soon)">
+            <input type="file" id="imageInput" accept="image/*" style="display: none;">
+            <button class="icon-btn tooltip" id="uploadBtn" data-tooltip="Upload Image">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
             </button>
             <button class="search-btn" id="searchBtn">
@@ -44,6 +47,7 @@
             </button>
           </div>
         </div>
+
         <div class="loading-bar-track" id="loadingBar">
           <div class="loading-bar-fill"></div>
         </div>

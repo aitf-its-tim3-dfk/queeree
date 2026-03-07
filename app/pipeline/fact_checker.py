@@ -100,9 +100,23 @@ async def generate_query(client: AsyncOpenAI, prompt: str, content: str) -> str:
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": content},
             ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "search_query",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}},
+                        "required": ["query"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
             temperature=0.3,
         )
-        return res.choices[0].message.content.strip()
+        data = json.loads(res.choices[0].message.content)
+        return data.get("query", "hoaks indonesia")
     except Exception as e:
         print(f"Query generation error: {e}")
         return "hoaks indonesia"
@@ -124,7 +138,7 @@ async def fact_check(
     for loop in range(MAX_LOOPS):
         if emit_progress:
             await emit_progress(
-                f"Mencari fakta (Iterasi {loop+1}/{MAX_LOOPS}): {query}"
+                f"Iterasi {loop+1}/{MAX_LOOPS}: Mencari '{query}'..."
             )
 
         try:
@@ -137,7 +151,13 @@ async def fact_check(
             results_context = "No search results returned."
         else:
             top_results = results[:4]
-            accumulated_sources.extend(top_results)
+            # Accumulate and deduplicate
+            current_urls = {s["url"] for s in accumulated_sources}
+            for r in top_results:
+                if r["url"] not in current_urls:
+                    accumulated_sources.append(r)
+                    current_urls.add(r["url"])
+
             results_context = "\n\n".join(
                 [
                     f"[{i+1}] {r['title']}\n{r['description']}\n(Source: {r['url']})"
@@ -147,33 +167,29 @@ async def fact_check(
             scratchpad.append(f"Q: {query} -> Found {len(results)} results.")
 
         if emit_progress:
-            await emit_progress(f"Mengevaluasi bukti (Iterasi {loop+1})...")
+            await emit_progress(
+                f"Evaluasi bukti: {len(accumulated_sources)} sumber unik terkumpul..."
+            )
 
         eval_result = await check_sufficiency(client, content, results_context)
 
         if eval_result.get("sufficient") is True:
             # Done!
             if emit_progress:
-                await emit_progress("Bukti cukup ditemukan.")
-
-            # Simple deduplication of all sources
-            seen = set()
-            unique_sources = []
-            for s in accumulated_sources:
-                if s["url"] not in seen:
-                    unique_sources.append(s)
-                    seen.add(s["url"])
+                await emit_progress("Verifikasi selesai: Bukti cukup ditemukan.")
 
             return {
                 "verified": eval_result.get("verified"),
                 "reasoning": eval_result.get("reasoning"),
-                "sources": unique_sources[:6],  # Top 6 total unique sources
+                "sources": accumulated_sources[:6],  # Top 6 total unique sources
             }
 
         # Not sufficient, refine the query
         if loop < MAX_LOOPS - 1:
             if emit_progress:
-                await emit_progress("Bukti belum cukup. Menyaring kueri pencarian...")
+                await emit_progress(
+                    f"Bukti belum cukup (Iterasi {loop+1}). Menyaring kueri..."
+                )
             refine_context = (
                 f"Original Claim:\n{content}\n\nPast queries and results:\n"
                 + "\n".join(scratchpad)
@@ -182,17 +198,11 @@ async def fact_check(
 
     # Failed to find sufficient evidence after MAX_LOOPS
     if emit_progress:
-        await emit_progress("Gagal memverifikasi klaim (Batas iterasi tercapai).")
-
-    seen = set()
-    unique_sources = []
-    for s in accumulated_sources:
-        if s["url"] not in seen:
-            unique_sources.append(s)
-            seen.add(s["url"])
+        await emit_progress("Batas pencarian tercapai. Hasil tidak konklusif.")
 
     return {
         "verified": None,
         "reasoning": "Tidak dapat menemukan bukti yang meyakinkan setelah beberapa pencarian.",
-        "sources": unique_sources[:6],
+        "sources": accumulated_sources[:6],
     }
+
