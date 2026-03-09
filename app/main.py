@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import mimetypes
 from sanic import Sanic
 from sanic.worker.manager import WorkerManager
 from sanic.response import json as json_response, file
@@ -59,9 +60,19 @@ async def analyze_endpoint(request):
         image_file = request.files.get("image")
         image_data = None
         if image_file:
+            mime_type = image_file.type
+            if mime_type == "application/octet-stream" and image_file.name:
+                guessed_type, _ = mimetypes.guess_type(image_file.name)
+                if guessed_type:
+                    mime_type = guessed_type
+            
+            # Fallback to a common image type if it's still generic or unknown
+            if mime_type == "application/octet-stream" or not mime_type:
+                mime_type = "image/jpeg"
+
             image_data = {
                 "bytes": image_file.body,
-                "mime_type": image_file.type,
+                "mime_type": mime_type,
             }
 
         config_str = request.form.get("config", "{}")

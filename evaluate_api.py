@@ -40,6 +40,7 @@ install_deps()
 import pandas as pd
 import aiohttp
 import aiofiles
+import mimetypes
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.metrics import classification_report, accuracy_score
 from bert_score import score as bert_score_fn
@@ -56,11 +57,15 @@ async def get_api_result_async(session, image_path, idx):
         # We need to construct a multipart payload manually for aiohttp
         data = aiohttp.FormData()
         data.add_field("content", "")
+        content_type, _ = mimetypes.guess_type(image_path)
+        if not content_type:
+            content_type = "image/jpeg"
+
         data.add_field(
             "image",
             open(image_path, "rb"),
             filename=os.path.basename(image_path),
-            content_type="application/octet-stream",
+            content_type=content_type,
         )
 
         async with session.post(

@@ -38,7 +38,10 @@ async def _analyze_multimodal_single(
     
     if image_data:
         b64_image = base64.b64encode(image_data["bytes"]).decode("utf-8")
-        data_uri = f"data:{image_data['mime_type']};base64,{b64_image}"
+        mime_type = image_data.get("mime_type", "image/jpeg")
+        if mime_type == "application/octet-stream":
+            mime_type = "image/jpeg"
+        data_uri = f"data:{mime_type};base64,{b64_image}"
         user_content.append({"type": "image_url", "image_url": {"url": data_uri}})
     
     for attempt in range(3):
