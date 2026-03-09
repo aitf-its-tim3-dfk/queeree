@@ -1,3 +1,4 @@
+import torch
 import json
 import numpy as np
 import hnswlib
@@ -29,7 +30,9 @@ def main():
 
     print("Loading Model...")
     model = SentenceTransformer(
-        "perplexity-ai/pplx-embed-v1-0.6B", trust_remote_code=True
+        "perplexity-ai/pplx-embed-v1-0.6B",
+        trust_remote_code=True,
+        model_kwargs={"dtype": torch.bfloat16},
     )
 
     titles = [law["pasal"] for law in laws]

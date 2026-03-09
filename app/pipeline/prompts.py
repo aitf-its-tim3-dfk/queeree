@@ -1,5 +1,16 @@
 # Prompts for the agentic content moderation pipeline
 
+IMAGE_CONTEXT_EXTRACTION_PROMPT = """You are an expert Indonesian content analyst.
+The user has provided an image. Your task is to extract any textual information visible in the image and succinctly describe the context, activities, and key objects shown.
+This information will be used to contextualize the image for content moderation. Answer in Indonesian.
+
+Return your results in the following JSON format ONLY:
+{
+  "extracted_text": "Any text found in the image",
+  "visual_context": "Description of what is happening in the image"
+}
+"""
+
 CLASSIFY_PROMPT = """You are an expert Indonesian content moderator.
 Your task is to analyze the user's content (which may include text and/or an image) and classify it into one or more of the following 10 categories if applicable:
 1. Provokasi (Provocation)

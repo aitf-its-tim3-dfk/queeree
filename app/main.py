@@ -2,6 +2,7 @@ import os
 import json
 import asyncio
 from sanic import Sanic
+from sanic.worker.manager import WorkerManager
 from sanic.response import json as json_response, file
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
@@ -11,6 +12,8 @@ from config import set_config, PipelineConfig
 
 # Load environment variables from .env file
 load_dotenv()
+
+WorkerManager.THRESHOLD = 900
 
 app = Sanic("OpenRouterApp")
 app.config.RESPONSE_TIMEOUT = 900
@@ -111,4 +114,4 @@ async def analyze_endpoint(request):
 
 if __name__ == "__main__":
     # Run the Sanic app locally
-    app.run(host="127.0.0.1", port=8000, dev=True)
+    app.run(host="0.0.0.0", port=8000, dev=True)

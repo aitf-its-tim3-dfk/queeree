@@ -1,3 +1,4 @@
+import torch
 import os
 import json
 import numpy as np
@@ -27,7 +28,9 @@ class LocalLawRetriever:
 
         print("Loading local law index...")
         self.embed_model = SentenceTransformer(
-            config.get_config_val("embedding_model_name"), trust_remote_code=True
+            config.get_config_val("embedding_model_name"),
+            trust_remote_code=True,
+            model_kwargs={"dtype": torch.bfloat16},
         )
 
         with open(
@@ -141,8 +144,10 @@ async def retrieve_laws(
             )
             content_str = res.choices[0].message.content
             if config.get_config_val("verbose_logging"):
-                print(f"[VERBOSE - LawRetriever Target Query] LLM Response: {content_str}")
-                
+                print(
+                    f"[VERBOSE - LawRetriever Target Query] LLM Response: {content_str}"
+                )
+
             if content_str is None:
                 raise ValueError("Model returned None content")
             data = json.loads(content_str.strip())
@@ -228,7 +233,7 @@ async def retrieve_laws(
             content_str = final_res.choices[0].message.content
             if config.get_config_val("verbose_logging"):
                 print(f"[VERBOSE - LawRetriever Summary] LLM Response: {content_str}")
-                
+
             if content_str is None:
                 raise ValueError("Model returned None content")
             summary_data = json.loads(content_str.strip())

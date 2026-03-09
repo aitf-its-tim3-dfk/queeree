@@ -61,6 +61,74 @@ async def generate_final_summary(client: AsyncOpenAI, user_content: str, pipelin
             
     return "Gagal menyusun ringkasan akhir."
 
+async def extract_image_context(client: AsyncOpenAI, image_data: Dict[str, Any]) -> str:
+    from .prompts import IMAGE_CONTEXT_EXTRACTION_PROMPT
+    import config
+    import base64
+    
+    b64_image = base64.b64encode(image_data["bytes"]).decode("utf-8")
+    data_uri = f"data:{image_data['mime_type']};base64,{b64_image}"
+    
+    for attempt in range(3):
+        try:
+            res = await client.chat.completions.create(
+                model=config.get_config_val("classifier_model_name"),
+                messages=[
+                    {"role": "system", "content": IMAGE_CONTEXT_EXTRACTION_PROMPT},
+                    {
+                        "role": "user", 
+                        "content": [
+                            {"type": "text", "text": "Ekstrak informasi dari gambar ini."},
+                            {"type": "image_url", "image_url": {"url": data_uri}}
+                        ]
+                    },
+                ],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "image_context",
+                        "strict": True,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "extracted_text": {"type": "string"},
+                                "visual_context": {"type": "string"}
+                            },
+                            "required": ["extracted_text", "visual_context"],
+                            "additionalProperties": False
+                        }
+                    }
+                },
+                temperature=0.3,
+                max_completion_tokens=config.get_config_val("max_completion_tokens"),
+                **config.get_llm_kwargs("classifier"),
+            )
+            content_str = res.choices[0].message.content
+            if config.get_config_val("verbose_logging"):
+                print(f"[VERBOSE - Image Context Extraction] LLM Response: {content_str}")
+            
+            if content_str is None:
+                raise ValueError("Model returned None content")
+                
+            data = json.loads(content_str.strip())
+            
+            extracted_text = data.get("extracted_text", "").strip()
+            visual_context = data.get("visual_context", "").strip()
+            
+            context_parts = []
+            if extracted_text:
+                context_parts.append(f"Teks dalam gambar: {extracted_text}")
+            if visual_context:
+                context_parts.append(f"Konteks visual: {visual_context}")
+                
+            return "\n".join(context_parts)
+            
+        except Exception as e:
+            print(f"Image context extraction attempt {attempt+1} error: {e}")
+            await asyncio.sleep(1)
+            
+    return ""
+
 async def analyze_content(
     client: AsyncOpenAI,
     content: str,
@@ -78,6 +146,18 @@ async def analyze_content(
     }
 
     try:
+        # Step 0: Image Context Extraction
+        if image_data:
+            if emit_progress:
+                await emit_progress(
+                    {"stage": "processing", "message": "Mengekstrak konteks dari gambar..."}
+                )
+            
+            image_context = await extract_image_context(client, image_data)
+            if image_context:
+                content = content.strip() + f"\n\n[Konteks Gambar yang Diekstrak]:\n{image_context}"
+                content = content.strip()
+
         # Step 1: Classification
         if emit_progress:
             await emit_progress(

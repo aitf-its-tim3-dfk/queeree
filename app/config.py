@@ -14,7 +14,7 @@ DEFAULT_CONFIG = {
     "classifier_n_samples": 5,
     "fact_checker_n_samples": 5,
     "fact_checker_max_loops": 3,
-    "max_completion_tokens": 2048,
+    "max_completion_tokens": 8192,
     "reasoning_effort": "medium",
     "verbose_logging": os.getenv("VERBOSE_LOGGING", "false").lower() == "true",
 }

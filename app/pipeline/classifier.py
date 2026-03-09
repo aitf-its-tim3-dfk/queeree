@@ -19,7 +19,7 @@ async def _classify_single(
             {"type": "image_url", "image_url": {"url": data_uri}}
         )
 
-    for attempt in range(3):
+    for attempt in range(5):
         try:
             response = await client.chat.completions.create(
                 model=config.get_config_val("classifier_model_name"),
@@ -35,8 +35,11 @@ async def _classify_single(
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "categories": {"type": "array", "items": {"type": "string"}},
-                                "needs_verification": {"type": "boolean"}
+                                "categories": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "needs_verification": {"type": "boolean"},
                             },
                             "required": ["categories", "needs_verification"],
                             "additionalProperties": False,
@@ -51,10 +54,10 @@ async def _classify_single(
             content_str = response.choices[0].message.content
             if config.get_config_val("verbose_logging"):
                 print(f"[VERBOSE - Classifier] LLM Response: {content_str}")
-                
+
             if content_str is None:
                 raise ValueError("Model returned None content")
-            
+
             reply = content_str.strip()
             data = json.loads(reply)
             return data.get("categories", []), data.get("needs_verification", False)
@@ -101,7 +104,7 @@ async def classify_content(
 
     category_counts = {}
     verification_votes = 0
-    
+
     for res in results:
         cats, needs_v = res
         for cat in set(cats):
@@ -129,4 +132,3 @@ async def classify_content(
     }
 
     return [c for c in final_categories if c in allowed], final_needs_verification
-
