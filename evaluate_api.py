@@ -100,12 +100,18 @@ async def process_all_requests(df):
         tasks = []
         for idx, row in df.iterrows():
             # Normalize path separators for cross-platform support (Colab is Linux)
-            img_rel_path = str(row.get("Screen Capture Path", "")).replace("\\", "/")
+            img_rel_path = ""
+            if "image_filename" in row and pd.notna(row["image_filename"]):
+                img_rel_path = str(row["image_filename"]).replace("\\", "/")
+            elif "Screen Capture Path" in row and pd.notna(row["Screen Capture Path"]):
+                img_rel_path = str(row["Screen Capture Path"]).replace("\\", "/")
+            
             file_name = img_rel_path.split("/")[-1]
 
             # Try multiple potential locations where the uploaded image might be
             possible_paths = [
                 img_rel_path,
+                os.path.join("sample", "data-new", "images", file_name),
                 os.path.join("sample", img_rel_path),
                 os.path.join("sample", "extracted_stuff", file_name),
                 os.path.join("extracted_stuff", file_name),
@@ -130,10 +136,12 @@ async def process_all_requests(df):
 
 
 async def main_async():
-    csv_path = "sample/extracted_stuff/extracted_data.csv"
+    csv_path = "sample/data-new/metadata-updt.csv"
     if not os.path.exists(csv_path):
-        print(f"Dataset not found at {csv_path}")
-        return
+        csv_path = "sample/extracted_stuff/extracted_data.csv"
+        if not os.path.exists(csv_path):
+            print(f"Dataset not found at {csv_path}")
+            return
 
     df = pd.read_csv(csv_path)
     print(f"Loaded dataset with {len(df)} rows.")
@@ -163,7 +171,12 @@ async def main_async():
             print(f"[{idx}] Skipping metrics due to failed request.")
             continue
 
-        gt_cat = str(row.get("Kategori", "")).strip()
+        gt_cat = ""
+        if "label" in row and pd.notna(row["label"]):
+            gt_cat = str(row["label"]).strip()
+        elif "Kategori" in row and pd.notna(row["Kategori"]):
+            gt_cat = str(row["Kategori"]).strip()
+        
         pred_cats = [c.strip() for c in result.get("categories", [])]
 
         cat_votes = result.get("category_votes", {})
@@ -171,17 +184,26 @@ async def main_async():
             c.strip() for c in sorted(cat_votes, key=cat_votes.get, reverse=True)
         ]
 
-        y_true_cats.append([gt_cat] if gt_cat else [])
+        y_true_cats.append([gt_cat] if gt_cat and gt_cat != "nan" else [])
         y_pred_cats.append(pred_cats)
         y_pred_cats_ranked.append(pred_cats_ranked)
 
-        gt_pelanggaran = str(row.get("Analisis Pelanggaran", ""))
-        gt_dampak = str(row.get("Analisis Dampak", ""))
+        gt_pelanggaran = ""
+        if "analisis_pelanggaran" in row and pd.notna(row["analisis_pelanggaran"]):
+            gt_pelanggaran = str(row["analisis_pelanggaran"])
+        elif "Analisis Pelanggaran" in row and pd.notna(row["Analisis Pelanggaran"]):
+            gt_pelanggaran = str(row["Analisis Pelanggaran"])
+
+        gt_dampak = ""
+        if "Analisis Dampak" in row and pd.notna(row["Analisis Dampak"]):
+            gt_dampak = str(row["Analisis Dampak"])
+
         gt_analysis = f"{gt_pelanggaran}\n{gt_dampak}".strip()
 
         pred_analysis = result.get("final_summary", "")
 
-        gt_hukum = str(row.get("Dasar Hukum", "")).strip()
+        gt_hukum = str(row.get("Dasar Hukum", "")) if pd.notna(row.get("Dasar Hukum")) else ""
+        gt_hukum = gt_hukum.strip()
         pred_hukum = str(result.get("laws_summary", "")).strip()
 
         ref_analysis.append(gt_analysis)
