@@ -7,7 +7,7 @@ from openai import AsyncOpenAI
 from sentence_transformers import SentenceTransformer
 from typing import Dict, Any
 import asyncio
-from .prompts import LAW_QUERY_PROMPT, LAW_SUMMARY_PROMPT
+from .prompts import LAW_QUERY_PROMPT, LAW_SUMMARY_PROMPT, construct_grounded_prompt
 import config
 
 
@@ -119,7 +119,7 @@ async def retrieve_laws(
             res = await client.chat.completions.create(
                 model=config.get_config_val("law_retriever_model_name"),
                 messages=[
-                    {"role": "system", "content": LAW_QUERY_PROMPT},
+                    {"role": "system", "content": construct_grounded_prompt(LAW_QUERY_PROMPT)},
                     {
                         "role": "user",
                         "content": f"Categories: {cats_str}\n\nContent snippet: {content[:500]}",
@@ -193,7 +193,7 @@ async def retrieve_laws(
             final_res = await client.chat.completions.create(
                 model=config.get_config_val("law_retriever_model_name"),
                 messages=[
-                    {"role": "system", "content": LAW_SUMMARY_PROMPT},
+                    {"role": "system", "content": construct_grounded_prompt(LAW_SUMMARY_PROMPT)},
                     {
                         "role": "user",
                         "content": f"Categories: {cats_str}\n\nSearch Results:\n{search_context}",

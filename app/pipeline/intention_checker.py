@@ -2,7 +2,7 @@ import json
 import asyncio
 from typing import Dict, Any, Optional, Callable
 from openai import AsyncOpenAI
-from .prompts import INTENTION_CHECK_PROMPT
+from .prompts import INTENTION_CHECK_PROMPT, construct_grounded_prompt
 import config
 
 
@@ -25,7 +25,7 @@ async def check_intention(
             response = await client.chat.completions.create(
                 model=config.get_config_val("classifier_model_name"), # We can reuse the classifier model here
                 messages=[
-                    {"role": "system", "content": INTENTION_CHECK_PROMPT},
+                    {"role": "system", "content": construct_grounded_prompt(INTENTION_CHECK_PROMPT)},
                     {
                         "role": "user",
                         "content": f"Content:\n{content}\n\nFact-Checker Findings:\n{fact_check_reasoning}",

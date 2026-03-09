@@ -3,7 +3,7 @@ import asyncio
 import base64
 from typing import List, Dict, Optional, Callable, Tuple
 from openai import AsyncOpenAI
-from .prompts import CLASSIFY_PROMPT
+from .prompts import CLASSIFY_PROMPT, construct_grounded_prompt
 import config
 
 
@@ -24,7 +24,7 @@ async def _classify_single(
             response = await client.chat.completions.create(
                 model=config.get_config_val("classifier_model_name"),
                 messages=[
-                    {"role": "system", "content": CLASSIFY_PROMPT},
+                    {"role": "system", "content": construct_grounded_prompt(CLASSIFY_PROMPT)},
                     {"role": "user", "content": user_message_content},
                 ],
                 response_format={

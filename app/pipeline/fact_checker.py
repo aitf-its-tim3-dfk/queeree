@@ -9,6 +9,7 @@ from .prompts import (
     PURE_REASONING_PROMPT,
     SUFFICIENCY_PROMPT,
     REFINED_QUERY_PROMPT,
+    construct_grounded_prompt,
 )
 from .retrieval import RetrievalQueue
 import config
@@ -22,7 +23,7 @@ async def _check_sufficiency_single(
             response = await client.chat.completions.create(
                 model=config.get_config_val("fact_checker_model_name"),
                 messages=[
-                    {"role": "system", "content": SUFFICIENCY_PROMPT},
+                    {"role": "system", "content": construct_grounded_prompt(SUFFICIENCY_PROMPT)},
                     {
                         "role": "user",
                         "content": f"Claim:\n{content}\n\nSearch Results:\n{results_context}",
@@ -131,7 +132,7 @@ async def _check_reasoning_single(client: AsyncOpenAI, content: str) -> Dict[str
             response = await client.chat.completions.create(
                 model=config.get_config_val("fact_checker_model_name"),
                 messages=[
-                    {"role": "system", "content": PURE_REASONING_PROMPT},
+                    {"role": "system", "content": construct_grounded_prompt(PURE_REASONING_PROMPT)},
                     {"role": "user", "content": f"Claim:\n{content}"},
                 ],
                 response_format={
@@ -219,7 +220,7 @@ async def generate_query(client: AsyncOpenAI, prompt: str, content: str) -> str:
             res = await client.chat.completions.create(
                 model=config.get_config_val("fact_checker_model_name"),
                 messages=[
-                    {"role": "system", "content": prompt},
+                    {"role": "system", "content": construct_grounded_prompt(prompt)},
                     {"role": "user", "content": content},
                 ],
                 response_format={

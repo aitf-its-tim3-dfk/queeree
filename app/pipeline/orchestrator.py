@@ -10,7 +10,7 @@ from .fact_checker import fact_check
 from .retrieval import RetrievalQueue, search_queue
 
 async def generate_final_summary(client: AsyncOpenAI, user_content: str, pipeline_result: Dict[str, Any]) -> str:
-    from .prompts import PIPELINE_SUMMARY_PROMPT
+    from .prompts import PIPELINE_SUMMARY_PROMPT, construct_grounded_prompt
     import config
     
     # We want to exclude base64 or heavy items if any, but our result dict is fairly clean.
@@ -24,7 +24,7 @@ async def generate_final_summary(client: AsyncOpenAI, user_content: str, pipelin
             res = await client.chat.completions.create(
                 model=config.get_config_val("law_retriever_model_name"),
                 messages=[
-                    {"role": "system", "content": PIPELINE_SUMMARY_PROMPT},
+                    {"role": "system", "content": construct_grounded_prompt(PIPELINE_SUMMARY_PROMPT)},
                     {"role": "user", "content": context},
                 ],
                 response_format={
@@ -62,7 +62,7 @@ async def generate_final_summary(client: AsyncOpenAI, user_content: str, pipelin
     return "Gagal menyusun ringkasan akhir."
 
 async def extract_image_context(client: AsyncOpenAI, image_data: Dict[str, Any]) -> str:
-    from .prompts import IMAGE_CONTEXT_EXTRACTION_PROMPT
+    from .prompts import IMAGE_CONTEXT_EXTRACTION_PROMPT, construct_grounded_prompt
     import config
     import base64
     
@@ -74,7 +74,7 @@ async def extract_image_context(client: AsyncOpenAI, image_data: Dict[str, Any])
             res = await client.chat.completions.create(
                 model=config.get_config_val("classifier_model_name"),
                 messages=[
-                    {"role": "system", "content": IMAGE_CONTEXT_EXTRACTION_PROMPT},
+                    {"role": "system", "content": construct_grounded_prompt(IMAGE_CONTEXT_EXTRACTION_PROMPT)},
                     {
                         "role": "user", 
                         "content": [

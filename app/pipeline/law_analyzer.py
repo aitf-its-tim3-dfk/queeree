@@ -9,7 +9,8 @@ import config
 from .prompts import (
     LAW_MULTIMODAL_ANALYZER_PROMPT,
     LAW_IMAGE_REASON_AGGREGATOR_PROMPT,
-    LAW_IMAGE_FINAL_REASON_PROMPT
+    LAW_IMAGE_FINAL_REASON_PROMPT,
+    construct_grounded_prompt
 )
 
 def find_longest_common_substring(original: str, segment: str):
@@ -45,7 +46,7 @@ async def _analyze_multimodal_single(
             res = await client.chat.completions.create(
                 model=config.get_config_val("classifier_model_name"),
                 messages=[
-                    {"role": "system", "content": LAW_MULTIMODAL_ANALYZER_PROMPT},
+                    {"role": "system", "content": construct_grounded_prompt(LAW_MULTIMODAL_ANALYZER_PROMPT)},
                     {"role": "user", "content": user_content},
                 ],
                 response_format={
@@ -190,7 +191,7 @@ async def analyze_multimodal_laws(
                     cluster_res = await client.chat.completions.create(
                         model=config.get_config_val("law_retriever_model_name"),
                         messages=[
-                            {"role": "system", "content": LAW_IMAGE_REASON_AGGREGATOR_PROMPT},
+                            {"role": "system", "content": construct_grounded_prompt(LAW_IMAGE_REASON_AGGREGATOR_PROMPT)},
                             {"role": "user", "content": reason_list_text},
                         ],
                         response_format={
@@ -225,7 +226,7 @@ async def analyze_multimodal_laws(
                         final_res = await client.chat.completions.create(
                             model=config.get_config_val("law_retriever_model_name"),
                             messages=[
-                                {"role": "system", "content": LAW_IMAGE_FINAL_REASON_PROMPT},
+                                {"role": "system", "content": construct_grounded_prompt(LAW_IMAGE_FINAL_REASON_PROMPT)},
                                 {"role": "user", "content": f"Law: {law['pasal']}\nCollected reasons:\n{top_reasons}"},
                             ],
                             response_format={

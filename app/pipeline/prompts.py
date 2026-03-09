@@ -1,4 +1,17 @@
 # Prompts for the agentic content moderation pipeline
+import datetime
+
+def construct_grounded_prompt(prompt_template: str) -> str:
+    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7))) # WIB
+    current_date = now.strftime("%Y-%m-%d %H:%M:%S %Z")
+    current_location = "Indonesia"
+    grounding_prefix = (
+        f"ENVIRONMENT CONTEXT:\n"
+        f"Current Date/Time: {current_date}\n"
+        f"Current Location: {current_location}\n\n"
+    )
+    return grounding_prefix + prompt_template
+
 
 IMAGE_CONTEXT_EXTRACTION_PROMPT = """You are an expert Indonesian content analyst.
 The user has provided an image. Your task is to extract any textual information visible in the image and succinctly describe the context, activities, and key objects shown.
