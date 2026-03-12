@@ -25,7 +25,7 @@ graph TD
     E --> F{Categories & Flags Found?}
     F -- No --> G[Pipeline End: Safe]
 
-    F -- Yes --> H{Needs Fact\nVerification?}
+    F -- Yes --> H{Needs Fact <br> Verification?}
     H -- Yes --> I[Fact Checker Module]
     I --> J{Fact Check Status}
 
@@ -70,7 +70,7 @@ graph TD
     E --> F
 
     F --> G[Aggregate Votes]
-    G --> H{Vote Count >= Threshold \n N / 2 + 1 ?}
+    G --> H{Vote Count >= Threshold <br> N / 2 + 1 ?}
 
     H -- Yes --> I[Keep Category / Flag]
     H -- No --> J[Discard Category / Flag]
