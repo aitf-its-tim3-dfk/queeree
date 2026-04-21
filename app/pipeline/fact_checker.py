@@ -24,7 +24,10 @@ async def _check_sufficiency_single(
             response = await client.chat.completions.create(
                 model=config.get_config_val("fact_checker_model_name"),
                 messages=[
-                    {"role": "system", "content": construct_grounded_prompt(SUFFICIENCY_PROMPT)},
+                    {
+                        "role": "system",
+                        "content": construct_grounded_prompt(SUFFICIENCY_PROMPT),
+                    },
                     {
                         "role": "user",
                         "content": f"Claim:\n{content}\n\nSearch Results:\n{results_context}",
@@ -133,7 +136,10 @@ async def _check_reasoning_single(client: AsyncOpenAI, content: str) -> Dict[str
             response = await client.chat.completions.create(
                 model=config.get_config_val("fact_checker_model_name"),
                 messages=[
-                    {"role": "system", "content": construct_grounded_prompt(PURE_REASONING_PROMPT)},
+                    {
+                        "role": "system",
+                        "content": construct_grounded_prompt(PURE_REASONING_PROMPT),
+                    },
                     {"role": "user", "content": f"Claim:\n{content}"},
                 ],
                 response_format={
@@ -274,6 +280,13 @@ async def run_search_path_iterative(
     query = await generate_query(client, initial_prompt, content)
 
     max_loops = config.get_config_val("fact_checker_max_loops") or 1
+    # Fallback
+    eval_result = {
+        "status": "UNVERIFIED",
+        "mean": 50,
+        "sufficient": False,
+        "reasoning": "No search iterations performed.",
+    }
     for loop in range(max_loops):
         if emit_progress:
             await emit_progress(
@@ -286,8 +299,10 @@ async def run_search_path_iterative(
             results = []
 
         if not results:
-            scratchpad.append(f"Q: {query} -> A: No results found.")
-            results_context = "No search results returned."
+            scratchpad.append(
+                f'Iteration {loop+1} — Query: "{query}"\n'
+                f"  Result: No results found."
+            )
         else:
             # Rerank results by relevance to the claim
             top_results = rerank(query, results, top_k=4)
@@ -297,13 +312,23 @@ async def run_search_path_iterative(
                     accumulated_sources.append(r)
                     current_urls.add(r["url"])
 
-            results_context = "\n\n".join(
+            result_summaries = "; ".join([f"\"{r['title']}\"" for r in top_results[:3]])
+            scratchpad.append(
+                f'Iteration {loop+1} — Query: "{query}"\n'
+                f"  Result: Found {len(results)} results. Top hits: {result_summaries}"
+            )
+
+        # Build results_context from ALL accumulated sources, not just current batch
+        results_context = (
+            "\n\n".join(
                 [
                     f"[{i+1}] {r['title']}\n{r['description']}\n(Source: {r['url']})"
-                    for i, r in enumerate(top_results)
+                    for i, r in enumerate(accumulated_sources)
                 ]
             )
-            scratchpad.append(f"Q: {query} -> Found {len(results)} results.")
+            if accumulated_sources
+            else "No search results returned."
+        )
 
         if emit_progress:
             await emit_progress(
@@ -324,6 +349,10 @@ async def run_search_path_iterative(
                 await emit_progress(
                     f"[{path_name}] Bukti belum cukup (Iterasi {loop+1}). Menyaring kueri..."
                 )
+            # Feed sufficiency reasoning back so the LLM knows why evidence was lacking
+            insufficiency_reason = eval_result.get("reasoning", "Unknown")
+            scratchpad.append(f"  → Insufficient because: {insufficiency_reason}")
+
             refine_context = (
                 f"Original Claim:\n{content}\n\nPast queries and results:\n"
                 + "\n".join(scratchpad)
@@ -377,12 +406,28 @@ async def fact_check(
     final_reasoning = ""
     mean_score = 50.0
 
-    # Decision logic
-    if p1["sufficient"] and p1["status"] in ["TRUE", "FALSE"]:
+    # Decision logic with conflict reconciliation
+    p1_decided = p1["sufficient"] and p1["status"] in ["TRUE", "FALSE"]
+    p2_decided = p2["sufficient"] and p2["status"] in ["TRUE", "FALSE"]
+
+    if p1_decided and p2_decided and p1["status"] != p2["status"]:
+        # Conflicting evidence: pick the path with higher confidence (further from 50)
+        p1_confidence = abs(p1["mean"] - 50)
+        p2_confidence = abs(p2["mean"] - 50)
+
+        if p2_confidence > p1_confidence:
+            final_status = p2["status"]
+            final_reasoning = f"(Bukti Kontradiktif lebih kuat — Skor {p2['mean']:.0f} vs Standar {p1['mean']:.0f})\n{p2['reasoning']}"
+            mean_score = p2["mean"]
+        else:
+            final_status = p1["status"]
+            final_reasoning = f"(Bukti Standar lebih kuat — Skor {p1['mean']:.0f} vs Kontradiktif {p2['mean']:.0f})\n{p1['reasoning']}"
+            mean_score = p1["mean"]
+    elif p1_decided:
         final_status = p1["status"]
         final_reasoning = f"(Berdasarkan Pencarian Bukti Standar)\n{p1['reasoning']}"
         mean_score = p1["mean"]
-    elif p2["sufficient"] and p2["status"] in ["TRUE", "FALSE"]:
+    elif p2_decided:
         final_status = p2["status"]
         final_reasoning = (
             f"(Berdasarkan Pencarian Bukti Kontradiktif)\n{p2['reasoning']}"
