@@ -55,10 +55,16 @@ def normalize_categories(cat_str):
     if not cat_str or pd.isna(cat_str) or str(cat_str).lower() == "nan":
         return []
 
-    # Mapping rules for normalization
+    # Mapping rules for normalization to the 3 final categories
     mapping = {
-        "fitnah": "Penghinaan",
-        "hasutan": "Provokasi",
+        "fitnah": "Fitnah",
+        "penghinaan": "Fitnah",
+        "hasutan": "Ujaran Kebencian",
+        "provokasi": "Ujaran Kebencian",
+        "sara": "Ujaran Kebencian",
+        "hoaks": "Disinformasi",
+        "misinformasi": "Disinformasi",
+        "penistaan agama": "Ujaran Kebencian",
     }
 
     # Split by common delimiters

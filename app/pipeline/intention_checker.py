@@ -15,10 +15,10 @@ async def check_intention(
     """
     Analyzes a false/debunked claim to determine if it's a Hostile Disinformation campaign
     or just a generic Hoax/Fabrication.
-    Returns: "Disinformasi" or "Hoaks"
+    Returns: "Disinformasi"
     """
     if emit_progress:
-        await emit_progress("Menganalisis niat dan kemungkinan manipulasi di balik konten (Disinformasi/Hoaks)...")
+        await emit_progress("Menganalisis niat dan kemungkinan manipulasi di balik konten...")
 
     for attempt in range(3):
         try:
@@ -39,11 +39,10 @@ async def check_intention(
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "has_malicious_intent": {"type": "boolean"},
-                                "category": {"type": "string", "enum": ["Disinformasi", "Hoaks"]},
+                                "category": {"type": "string", "enum": ["Disinformasi"]},
                                 "reasoning": {"type": "string"}
                             },
-                            "required": ["has_malicious_intent", "category", "reasoning"],
+                            "required": ["category", "reasoning"],
                             "additionalProperties": False,
                         },
                     },
@@ -63,9 +62,9 @@ async def check_intention(
             reply = content_str.strip()
             data = json.loads(reply)
             
-            cat = data.get("category", "Hoaks")
-            if cat not in ["Disinformasi", "Hoaks"]:
-                cat = "Hoaks"
+            cat = data.get("category", "Disinformasi")
+            if cat != "Disinformasi":
+                cat = "Disinformasi"
             
             if emit_progress:
                 reason = data.get('reasoning', '')
@@ -75,6 +74,6 @@ async def check_intention(
         except Exception as e:
             print(f"Intention check attempt {attempt+1} error: {e}")
             if attempt == 2:
-                # Default to Hoaks on failure
-                return "Hoaks"
+                # Default to Disinformasi on failure
+                return "Disinformasi"
             await asyncio.sleep(1)

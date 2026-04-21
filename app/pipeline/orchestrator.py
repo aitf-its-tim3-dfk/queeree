@@ -174,8 +174,9 @@ async def analyze_content(
         result["category_votes"] = category_counts
 
         if not categories and not needs_verification:
+            result["label"] = "Netral"
             if emit_progress:
-                await emit_progress({"stage": "done", "message": "Selesai: Aman."})
+                await emit_progress({"stage": "done", "message": "Selesai: Netral."})
             return result
 
         result["is_flagged"] = True
@@ -202,14 +203,15 @@ async def analyze_content(
                 if intent_cat not in categories:
                     categories.append(intent_cat)
             elif status == "UNVERIFIED":
-                if "Misinformasi" not in categories:
-                    categories.append("Misinformasi")
+                if "Disinformasi" not in categories:
+                    categories.append("Disinformasi")
             # If TRUE, we don't add any misinformation categories.
             
         result["categories"] = categories
 
         # Double check if categories is actually empty after fact check
         if not categories:
+            result["label"] = "Fakta"
             if emit_progress:
                 await emit_progress({"stage": "done", "message": "Selesai: Fakta terverifikasi, konten aman."})
             result["is_flagged"] = False

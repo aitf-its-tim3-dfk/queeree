@@ -1,8 +1,9 @@
 # Prompts for the agentic content moderation pipeline
 import datetime
 
+
 def construct_grounded_prompt(prompt_template: str) -> str:
-    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7))) # WIB
+    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7)))  # WIB
     current_date = now.strftime("%Y-%m-%d %H:%M:%S %Z")
     current_location = "Indonesia"
     grounding_prefix = (
@@ -25,17 +26,10 @@ Return your results in the following JSON format ONLY:
 """
 
 CLASSIFY_PROMPT = """You are an expert Indonesian content moderator.
-Your task is to analyze the user's content (which may include text and/or an image) and classify it into one or more of the following 10 categories if applicable:
-1. Provokasi (Provocation)
-2. SARA (Ethnicity, Religion, Race, and Inter-group relations)
-3. Separatisme (Separatism)
-4. Ujaran Kebencian (Hate Speech)
-5. Penghinaan (Insult/Defamation)
-6. Makar (Treason)
-7. Ancaman (Threat)
-8. Pelanggaran Keamanan Informasi (Information Security Breach)
-9. Kekerasan (Violence)
-10. Penistaan Agama (Blasphemy)
+Your task is to analyze the user's content (which may include text and/or an image) and classify it into one or more of the following 3 categories if applicable (ONLY USE THE INDONESIAN LABEL):
+1. Disinformasi — False, misleading, or manipulative information, including hoaxes and fabricated claims.
+2. Fitnah — Content that defames, insults, or spreads false accusations against individuals or groups.
+3. Ujaran Kebencian — Content that incites hatred, discrimination, or hostility towards individuals or groups based on identity (ethnicity, religion, race, gender, etc.).
 
 Analyze both the text and any visual information provided in the image together.
 Additionally, you must determine if the content makes a factual claim that should be verified against real-world evidence. If the content contains claims about events, statistics, science, or news that could potentially be false, respond with `needs_verification`: true. If it is purely opinion, insult, or subjective without testable claims, respond with false.
@@ -188,14 +182,11 @@ Return your results in the following JSON format ONLY:
 
 INTENTION_CHECK_PROMPT = """You are an expert content analyst.
 The user has provided a claim that has been verified to be FALSE or a HOAX.
-Your task is to analyze the content and determine if there is a clear intention to mislead, deceive, manipulate public opinion, or cause harm (e.g., political manipulation, scam, intentional inciting of panic). 
-If there is such manipulative intent, it is classified as "Disinformasi".
-If it appears to be a mere fabrication, prank, or false claim without a deeper malicious agenda, it is classified as "Hoaks".
+Your task is to analyze the content and confirm its classification as "Disinformasi" (disinformation). Explain the nature of the false claim — whether it appears to be deliberate manipulation, a fabrication, a rumor, or casual misinformation.
 
 Return your results in the following JSON format ONLY:
 {
-  "has_malicious_intent": true/false,
-  "category": "Disinformasi" or "Hoaks",
+  "category": "Disinformasi",
   "reasoning": "Brief explanation of the intent analysis"
 }
 """
@@ -209,4 +200,3 @@ Return your results in the following JSON format ONLY:
   "final_summary": "Your overarching final summary here"
 }
 """
-
