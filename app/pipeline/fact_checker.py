@@ -305,7 +305,7 @@ async def run_search_path_iterative(
             )
         else:
             # Rerank results by relevance to the claim
-            top_results = rerank(query, results, top_k=4)
+            top_results = await rerank(query, results, top_k=4)
             current_urls = {s["url"] for s in accumulated_sources}
             for r in top_results:
                 if r["url"] not in current_urls:
@@ -410,45 +410,73 @@ async def fact_check(
     p1_decided = p1["sufficient"] and p1["status"] in ["TRUE", "FALSE"]
     p2_decided = p2["sufficient"] and p2["status"] in ["TRUE", "FALSE"]
 
-    if p1_decided and p2_decided and p1["status"] != p2["status"]:
-        # Conflicting evidence: pick the path with higher confidence (further from 50)
-        p1_confidence = abs(p1["mean"] - 50)
-        p2_confidence = abs(p2["mean"] - 50)
-
-        if p2_confidence > p1_confidence:
-            final_status = p2["status"]
-            final_reasoning = f"(Bukti Kontradiktif lebih kuat — Skor {p2['mean']:.0f} vs Standar {p1['mean']:.0f})\n{p2['reasoning']}"
-            mean_score = p2["mean"]
-        else:
-            final_status = p1["status"]
-            final_reasoning = f"(Bukti Standar lebih kuat — Skor {p1['mean']:.0f} vs Kontradiktif {p2['mean']:.0f})\n{p1['reasoning']}"
-            mean_score = p1["mean"]
-    elif p1_decided:
+    # Happy path: both agree or only one decided
+    if p1_decided and p2_decided and p1["status"] == p2["status"]:
+        final_status = p1["status"]
+        final_reasoning = f"(Kedua jalur pencarian sepakat)\n{p1['reasoning']}"
+        mean_score = (p1["mean"] + p2["mean"]) / 2.0
+    elif p1_decided and not p2_decided:
         final_status = p1["status"]
         final_reasoning = f"(Berdasarkan Pencarian Bukti Standar)\n{p1['reasoning']}"
         mean_score = p1["mean"]
-    elif p2_decided:
+    elif p2_decided and not p1_decided:
         final_status = p2["status"]
         final_reasoning = (
             f"(Berdasarkan Pencarian Bukti Kontradiktif)\n{p2['reasoning']}"
         )
         mean_score = p2["mean"]
-    elif p3["status"] in ["TRUE", "FALSE"]:
-        final_status = p3["status"]
-        final_reasoning = (
-            f"(Berdasarkan Konsistensi Logis Internal Model)\n{p3['reasoning']}"
-        )
-        mean_score = p3["mean"]
     else:
-        final_status = "UNVERIFIED"
-        final_reasoning = (
-            f"Bukti eksternal tidak cukup dan logika dasar menghasilkan probabilitas ragu-ragu.\n\n"
-            f"Standar: {p1['reasoning']}\n\n"
-            f"Kontradiksi: {p2['reasoning']}\n\n"
-            f"Logika Internal: {p3['reasoning']}"
-        )
-        # Average the unverified scores just to have a number
-        mean_score = (p1["mean"] + p2["mean"] + p3["mean"]) / 3.0
+        # Conflict or both inconclusive, run combined sufficiency on pooled evidence
+        if unique_sources:
+            if emit_progress:
+                await emit_progress(
+                    "Jalur pencarian tidak konklusif. Mengevaluasi seluruh bukti gabungan..."
+                )
+
+            combined_context = "\n\n".join(
+                [
+                    f"[{i+1}] {r['title']}\n{r['description']}\n(Source: {r['url']})"
+                    for i, r in enumerate(unique_sources)
+                ]
+            )
+            combined_eval = await check_sufficiency(client, content, combined_context)
+
+            combined_status = combined_eval.get("status")
+            if combined_status in ["TRUE", "FALSE"]:
+                final_status = combined_status
+                final_reasoning = (
+                    f"(Berdasarkan Evaluasi Bukti Gabungan — {len(unique_sources)} sumber)\n"
+                    f"{combined_eval['reasoning']}"
+                )
+                mean_score = combined_eval["mean"]
+            elif p3["status"] in ["TRUE", "FALSE"]:
+                # Combined still inconclusive, fall back to reasoning path
+                final_status = p3["status"]
+                final_reasoning = (
+                    f"(Berdasarkan Konsistensi Logis Internal Model)\n{p3['reasoning']}"
+                )
+                mean_score = p3["mean"]
+            else:
+                final_status = "UNVERIFIED"
+                final_reasoning = (
+                    f"Bukti gabungan dan logika dasar tidak cukup untuk memutuskan.\n\n"
+                    f"Evaluasi Gabungan: {combined_eval.get('reasoning', '')}\n\n"
+                    f"Logika Internal: {p3['reasoning']}"
+                )
+                mean_score = (combined_eval["mean"] + p3["mean"]) / 2.0
+        elif p3["status"] in ["TRUE", "FALSE"]:
+            final_status = p3["status"]
+            final_reasoning = (
+                f"(Berdasarkan Konsistensi Logis Internal Model)\n{p3['reasoning']}"
+            )
+            mean_score = p3["mean"]
+        else:
+            final_status = "UNVERIFIED"
+            final_reasoning = (
+                f"Tidak ada bukti eksternal dan logika dasar menghasilkan probabilitas ragu-ragu.\n\n"
+                f"Logika Internal: {p3['reasoning']}"
+            )
+            mean_score = p3["mean"]
 
     if emit_progress:
         await emit_progress(
