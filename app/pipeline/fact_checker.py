@@ -12,6 +12,7 @@ from .prompts import (
     construct_grounded_prompt,
 )
 from .retrieval import RetrievalQueue
+from .reranker import rerank
 import config
 
 
@@ -288,7 +289,8 @@ async def run_search_path_iterative(
             scratchpad.append(f"Q: {query} -> A: No results found.")
             results_context = "No search results returned."
         else:
-            top_results = results[:4]
+            # Rerank results by relevance to the claim
+            top_results = rerank(query, results, top_k=4)
             current_urls = {s["url"] for s in accumulated_sources}
             for r in top_results:
                 if r["url"] not in current_urls:

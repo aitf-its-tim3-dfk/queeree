@@ -8,6 +8,7 @@ from sanic.response import json as json_response, file
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from pipeline import analyze_content, search_queue
+from pipeline.reranker import load as load_reranker
 from config import set_config, PipelineConfig
 
 # Load environment variables from .env file
@@ -32,6 +33,12 @@ client = AsyncOpenAI(
 async def setup(app, loop):
     """Initialize background tasks."""
     await search_queue.start()
+
+
+@app.after_server_start
+async def load_models(app, loop):
+    """Pre-load heavy models after server has started."""
+    load_reranker()
 
 
 @app.after_server_stop
