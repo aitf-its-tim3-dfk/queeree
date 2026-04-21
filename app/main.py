@@ -8,7 +8,6 @@ from sanic.response import json as json_response, file
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from pipeline import analyze_content, search_queue
-from pipeline.law_retriever import local_law_retriever
 from config import set_config, PipelineConfig
 
 # Load environment variables from .env file
@@ -31,8 +30,7 @@ client = AsyncOpenAI(
 
 @app.before_server_start
 async def setup(app, loop):
-    """Initialize background tasks and pre-load heavy models."""
-    local_law_retriever.load()
+    """Initialize background tasks."""
     await search_queue.start()
 
 

@@ -43,30 +43,6 @@ If the content does not fall into any of these categories, return an empty array
 Do not include any other text or reasoning.
 """
 
-LAW_QUERY_PROMPT = """You are an expert in Indonesian law.
-You have been given a piece of content and the moderation categories it triggered.
-Your goal is to formulate a short, effective search query to find the relevant Indonesian laws (Undang-Undang, KUHP, UU ITE, etc.) dealing with this specific type of offense.
-
-Return your results in the following JSON format:
-{
-  "query": "the search query here"
-}
-"""
-
-LAW_SUMMARY_PROMPT = """Based on the search results provided, summarize the core Indonesian laws (Undang-Undang, KUHP, UU ITE, dsb) that relate to the offense categories provided.
-Cite the pasal (article numbers) clearly. Answer directly in Indonesian.
-
-Return your results in the following JSON format:
-{
-  "summary": "Full summary text in Markdown format",
-  "articles": [
-    {
-      "pasal": "Pasal X",
-      "description": "Short description of what the article says"
-    }
-  ]
-}
-"""
 
 FACT_CHECK_STANDARD_QUERY_PROMPT = """You are an expert fact-checker.
 The user has provided a claim that needs to be verified.
@@ -122,63 +98,6 @@ Return your results in the following JSON format:
 }
 """
 
-LAW_TEXT_ANALYZER_PROMPT = """You are an expert Indonesian law moderator.
-The user has provided a piece of text and a specific Indonesian law.
-Determine if the text actually violates the law. If it does not, return `is_violation` as false and explain why in `overall_reason`. If it does, return `is_violation` as true, identify the specific segment(s) of the text that trigger this law, and explain why.
-
-Return your results in the following JSON format ONLY:
-{
-  "is_violation": true/false,
-  "segments": [
-    {
-      "text": "Exact quote from the user's text",
-      "reason": "Why this segment violates the law"
-    }
-  ],
-  "overall_reason": "Summary of why the law applies (or does not apply) to this text"
-}
-"""
-
-LAW_MULTIMODAL_ANALYZER_PROMPT = """You are an expert Indonesian law moderator.
-The user has provided content (which may include text, an image, or both) and a specific Indonesian law. They may also provide fact-checking context if the content contains factual claims.
-Determine if the content actually violates the law. 
-If it does not, return `is_violation` as false and explain why. 
-If it does, return `is_violation` as true. Explain exactly why the content violates this law. If there is text, identify the specific segment(s) of the text that trigger this law.
-
-Return your results in the following JSON format ONLY:
-{
-  "is_violation": true/false,
-  "segments": [
-    {
-      "text": "Exact quote from the user's text (if applicable)",
-      "reason": "Why this segment violates the law"
-    }
-  ],
-  "reason": "Overall explanation of why the content violates (or does not violate) the law"
-}
-"""
-
-LAW_IMAGE_REASON_AGGREGATOR_PROMPT = """You are an expert at summarizing arguments.
-You are given a list of reasons why an image violates a specific law.
-Cluster similar reasons and count how many times each distinct reason appears.
-
-Return your results in the following JSON format ONLY:
-{
-  "clustered_reasons": {
-    "Distinct reason 1": 2,
-    "Distinct reason 2": 1
-  }
-}
-"""
-
-LAW_IMAGE_FINAL_REASON_PROMPT = """You are an expert Indonesian law moderator.
-Based on the provided most common reasons, write a final, cohesive explanation of why the user's image violates the specified law.
-
-Return your results in the following JSON format ONLY:
-{
-  "reason": "Final conclusive explanation"
-}
-"""
 
 INTENTION_CHECK_PROMPT = """You are an expert content analyst.
 The user has provided a claim that has been verified to be FALSE or a HOAX.
@@ -192,8 +111,8 @@ Return your results in the following JSON format ONLY:
 """
 
 PIPELINE_SUMMARY_PROMPT = """You are an expert content policy enforcer.
-You are given the final results of a content moderation pipeline, which may include identified categories, fact-checking results, and relevant laws violated.
-Your task is to write a cohesive, overarching final summary explaining the verdict in Indonesian. Why was this content flagged? Synthesize the fact-checking results (if any) and the legal context into a clear, concise paragraph. Focus on the core reason it is not safe.
+You are given the final results of a content moderation pipeline, which may include identified categories and fact-checking results.
+Your task is to write a cohesive, overarching final summary explaining the verdict in Indonesian. Why was this content flagged? Synthesize the fact-checking results (if any) into a clear, concise paragraph. Focus on the core reason it is not safe.
 
 Return your results in the following JSON format ONLY:
 {
