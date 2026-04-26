@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 # Base Configuration
-GLOBAL_MODEL_NAME = "qwen/qwen3.5-122b-a10b"
+GLOBAL_MODEL_NAME = "qwen/qwen3.5-27b"
 
 DEFAULT_CONFIG = {
     "classifier_model_name": GLOBAL_MODEL_NAME,
@@ -12,7 +12,7 @@ DEFAULT_CONFIG = {
     "classifier_n_samples": 5,
     "fact_checker_n_samples": 3,
     "fact_checker_max_loops": 3,
-    "max_completion_tokens": 4096,
+    "max_completion_tokens": 2048,
     "reasoning_effort": "low",
     "verbose_logging": os.getenv("VERBOSE_LOGGING", "false").lower() == "true",
 }
@@ -66,9 +66,6 @@ def CLASSIFIER_MODEL_NAME():
 @property
 def FACT_CHECKER_MODEL_NAME():
     return get_config_val("fact_checker_model_name")
-
-
-
 
 
 @property

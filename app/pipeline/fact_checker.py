@@ -68,7 +68,10 @@ async def _check_sufficiency_single(
                 raise ValueError("Model returned None content")
 
             reply = content_str.strip()
-            return json.loads(reply)
+            data = json.loads(reply)
+            if not isinstance(data, dict):
+                raise ValueError(f"Expected dict from LLM, got {type(data).__name__}: {data}")
+            return data
         except Exception as e:
             print(f"Sufficiency check attempt {attempt+1} error: {e}")
             if attempt == 2:
@@ -170,7 +173,10 @@ async def _check_reasoning_single(client: AsyncOpenAI, content: str) -> Dict[str
                 raise ValueError("Model returned None content")
 
             reply = content_str.strip()
-            return json.loads(reply)
+            data = json.loads(reply)
+            if not isinstance(data, dict):
+                raise ValueError(f"Expected dict from LLM, got {type(data).__name__}: {data}")
+            return data
         except Exception as e:
             if attempt == 2:
                 return {
