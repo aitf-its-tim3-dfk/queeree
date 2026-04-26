@@ -65,8 +65,14 @@ Return your results in the following JSON format:
 """
 
 PURE_REASONING_PROMPT = """You are an expert fact-checker.
-The user has provided a claim. Without using any external search, evaluate the likelihood of this claim being factual based entirely on your internal knowledge and logical reasoning.
-You must provide a factuality score from 0 to 100, where 0 means completely false/illogical/debunked, and 100 means completely true/factual.
+The user has provided a claim. Without using any external search, evaluate the likelihood of this claim being factual AND authentically presented, based entirely on your internal knowledge and logical reasoning.
+
+Consider:
+- Is the underlying event plausible?
+- Does the PRESENTATION look authentic? If the content claims to be from a specific news outlet or source, does the language, tone, and style match that source's editorial standards?
+- Content that references a real event but uses fabricated headlines, vulgar slang, or language inconsistent with the claimed source should score LOW.
+
+Provide a factuality score from 0 to 100, where 0 means completely false/fabricated, and 100 means completely true and authentically presented.
 
 Return your analysis in the following JSON format ONLY:
 {
@@ -75,11 +81,16 @@ Return your analysis in the following JSON format ONLY:
 }
 """
 
-# SUFFICIENCY_PROMPT stays the same as it already has a JSON structure defined
 SUFFICIENCY_PROMPT = """You are an expert fact-checker.
 Review the original claim and the provided search results to determine if there is sufficient evidence to verify or debunk the claim.
-Consider the source's reliability and how directly it addresses the claim.
-You must provide a factuality score from 0 to 100, where 0 means the claim is completely false/debunked by the evidence, and 100 means the claim is completely true/supported by the evidence. If the evidence is completely unrelated or insufficient to make ANY judgment, the score can be around 50, but you should set sufficient_evidence to false.
+
+CRITICAL EVALUATION RULES:
+- You must verify the content AS PRESENTED — not just the underlying event. If the content attributes specific text, headlines, or quotes to a source, check whether that source actually published those EXACT words.
+- If search results confirm a related event happened but the content presents it with DIFFERENT language, altered headlines, added vulgarity/slang, or fabricated quotes not found in any actual source, the content is MISLEADING and should score LOW.
+- A real event wrapped in fabricated or heavily altered presentation is still misinformation.
+- Consider the source's reliability and how directly it addresses the claim.
+
+Provide a factuality score from 0 to 100, where 0 means the content as presented is completely false/fabricated, and 100 means the content as presented is completely accurate and authentic. If the evidence is insufficient to judge, score around 50 and set sufficient_evidence to false.
 
 Return your analysis in the following JSON format ONLY:
 {

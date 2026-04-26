@@ -70,7 +70,9 @@ async def _check_sufficiency_single(
             reply = content_str.strip()
             data = json.loads(reply)
             if not isinstance(data, dict):
-                raise ValueError(f"Expected dict from LLM, got {type(data).__name__}: {data}")
+                raise ValueError(
+                    f"Expected dict from LLM, got {type(data).__name__}: {data}"
+                )
             return data
         except Exception as e:
             print(f"Sufficiency check attempt {attempt+1} error: {e}")
@@ -175,7 +177,9 @@ async def _check_reasoning_single(client: AsyncOpenAI, content: str) -> Dict[str
             reply = content_str.strip()
             data = json.loads(reply)
             if not isinstance(data, dict):
-                raise ValueError(f"Expected dict from LLM, got {type(data).__name__}: {data}")
+                raise ValueError(
+                    f"Expected dict from LLM, got {type(data).__name__}: {data}"
+                )
             return data
         except Exception as e:
             if attempt == 2:
@@ -416,23 +420,37 @@ async def fact_check(
     p1_decided = p1["sufficient"] and p1["status"] in ["TRUE", "FALSE"]
     p2_decided = p2["sufficient"] and p2["status"] in ["TRUE", "FALSE"]
 
-    # Happy path: both agree or only one decided
+    # Both paths agree or only one decided
+    # But check if reasoning path strongly disagrees (authenticity concern)
+    decided = False
     if p1_decided and p2_decided and p1["status"] == p2["status"]:
-        final_status = p1["status"]
-        final_reasoning = f"(Kedua jalur pencarian sepakat)\n{p1['reasoning']}"
-        mean_score = (p1["mean"] + p2["mean"]) / 2.0
+        search_mean = (p1["mean"] + p2["mean"]) / 2.0
+        reasoning_mean = p3["mean"]
+        if abs(search_mean - reasoning_mean) > 40:
+            # Reasoning path strongly disagrees, don't auto-accept, fall through to combined eval
+            if emit_progress:
+                await emit_progress(
+                    f"Jalur logika internal sangat berbeda (skor {reasoning_mean:.0f} vs {search_mean:.0f}). Mengevaluasi ulang..."
+                )
+        else:
+            final_status = p1["status"]
+            final_reasoning = f"(Kedua jalur pencarian sepakat)\n{p1['reasoning']}"
+            mean_score = search_mean
+            decided = True
     elif p1_decided and not p2_decided:
         final_status = p1["status"]
         final_reasoning = f"(Berdasarkan Pencarian Bukti Standar)\n{p1['reasoning']}"
         mean_score = p1["mean"]
+        decided = True
     elif p2_decided and not p1_decided:
         final_status = p2["status"]
         final_reasoning = (
             f"(Berdasarkan Pencarian Bukti Kontradiktif)\n{p2['reasoning']}"
         )
         mean_score = p2["mean"]
-    else:
-        # Conflict or both inconclusive, run combined sufficiency on pooled evidence
+        decided = True
+    if not decided:
+        # Conflict, reasoning divergence, or both inconclusive, run combined sufficiency on pooled evidence
         if unique_sources:
             if emit_progress:
                 await emit_progress(
