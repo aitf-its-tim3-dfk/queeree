@@ -3,9 +3,11 @@ import json
 import asyncio
 import mimetypes
 import httpx
+from textwrap import dedent
 from sanic import Sanic
 from sanic.worker.manager import WorkerManager
 from sanic.response import json as json_response, file
+from sanic_ext import openapi
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from pipeline import analyze_content, search_queue
@@ -20,6 +22,30 @@ WorkerManager.THRESHOLD = 900
 app = Sanic("OpenRouterApp")
 app.config.RESPONSE_TIMEOUT = 900
 app.config.KEEP_ALIVE_TIMEOUT = 900
+
+# OpenAPI metadata
+app.ext.openapi.describe(
+    "Queeree Content Moderation API",
+    version="1.0.0",
+    description=dedent("""
+        AI-powered content moderation and fact-checking pipeline.
+
+        ## Overview
+        This API analyzes text and/or image content through a multi-stage pipeline:
+        1. **Classification** — categorizes the content
+        2. **Fact-checking** — verifies claims via web search
+        3. **Final analysis** — produces a moderation verdict
+
+        ## Response Format
+        The `/api/analyze` endpoint uses **Server-Sent Events (SSE)** to stream
+        progress updates in real-time, followed by a final result payload.
+
+        Each SSE message is a JSON object with a `type` field:
+        - `progress` — intermediate pipeline status
+        - `result` — final analysis output
+        - `error` — something went wrong
+    """),
+)
 
 MEDIA_FETCH_TIMEOUT = 30  # seconds
 MAX_MEDIA_SIZE = 20 * 1024 * 1024  # 20 MB
@@ -62,30 +88,165 @@ client = AsyncOpenAI(
 
 
 @app.before_server_start
-async def setup(app, loop):
+async def setup(app):
     """Initialize background tasks."""
     await search_queue.start()
 
 
 @app.after_server_start
-async def load_models(app, loop):
+async def load_models(app):
     """Pre-load heavy models after server has started."""
     load_reranker()
 
 
 @app.after_server_stop
-async def teardown(app, loop):
+async def teardown(app):
     """Clean up background tasks on shutdown."""
     await search_queue.stop()
 
 
 @app.route("/")
+@openapi.exclude()
 async def index(request):
     """Serves the main frontend UI."""
     return await file("./static/index.html")
 
 
 @app.post("/api/analyze")
+@openapi.summary("Analyze content")
+@openapi.description(dedent("""
+    Run the full moderation pipeline on text and/or image content.
+
+    **Accepts** either `multipart/form-data` or `application/json`.
+
+    ### Multipart Form Fields
+    | Field | Type | Required | Description |
+    |-------|------|----------|-------------|
+    | `content` | string | conditional | Text content to analyze |
+    | `image` | file | conditional | Image/media file to analyze |
+    | `media_url` | string | no | URL to fetch media from (used when no file is uploaded) |
+    | `config` | string (JSON) | no | Pipeline config overrides (JSON object) |
+
+    At least one of `content` or `image`/`media_url` is required.
+
+    ### JSON Body
+    ```json
+    {
+      "content": "text to analyze",
+      "media_url": "https://example.com/image.jpg",
+      "config": {
+        "classifier_model_name": "qwen/qwen3.5-27b",
+        "reasoning_effort": "low"
+      }
+    }
+    ```
+
+    ### Config Overrides
+    | Key | Type | Description |
+    |-----|------|-------------|
+    | `classifier_model_name` | string | Model for classification stage |
+    | `fact_checker_model_name` | string | Model for fact-checking stage |
+    | `classifier_n_samples` | int | Number of classification samples |
+    | `fact_checker_n_samples` | int | Number of fact-checker samples |
+    | `fact_checker_max_loops` | int | Max search loops for fact-checker |
+    | `max_completion_tokens` | int | Max tokens per LLM call |
+    | `reasoning_effort` | string | Global reasoning effort (`low`, `medium`, `high`) |
+    | `verbose_logging` | bool | Enable verbose pipeline logs |
+
+    ### Response (SSE stream)
+    The response is a `text/event-stream`. Each event is a JSON line:
+    - `{"type": "progress", "data": {...}}` — pipeline progress
+    - `{"type": "result", "data": {...}}` — final analysis
+    - `{"type": "error", "data": "..."}` — error message
+"""))
+@openapi.body(
+    {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "description": "Text content to analyze",
+                    },
+                    "media_url": {
+                        "type": "string",
+                        "format": "uri",
+                        "description": "URL to fetch media from (used when no file is uploaded)",
+                    },
+                    "config": {
+                        "type": "object",
+                        "description": "Pipeline config overrides",
+                        "properties": {
+                            "classifier_model_name": {
+                                "type": "string",
+                                "description": "Model for classification stage",
+                            },
+                            "fact_checker_model_name": {
+                                "type": "string",
+                                "description": "Model for fact-checking stage",
+                            },
+                            "classifier_n_samples": {
+                                "type": "integer",
+                                "description": "Number of classification samples",
+                            },
+                            "fact_checker_n_samples": {
+                                "type": "integer",
+                                "description": "Number of fact-checker samples",
+                            },
+                            "fact_checker_max_loops": {
+                                "type": "integer",
+                                "description": "Max search loops for fact-checker",
+                            },
+                            "max_completion_tokens": {
+                                "type": "integer",
+                                "description": "Max tokens per LLM call",
+                            },
+                            "reasoning_effort": {
+                                "type": "string",
+                                "enum": ["low", "medium", "high"],
+                                "description": "Global reasoning effort level",
+                            },
+                            "verbose_logging": {
+                                "type": "boolean",
+                                "description": "Enable verbose pipeline logs",
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        "multipart/form-data": {
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "description": "Text content to analyze",
+                    },
+                    "image": {
+                        "type": "string",
+                        "format": "binary",
+                        "description": "Image/media file to analyze",
+                    },
+                    "media_url": {
+                        "type": "string",
+                        "format": "uri",
+                        "description": "URL to fetch media from (used when no file is uploaded)",
+                    },
+                    "config": {
+                        "type": "string",
+                        "description": "Pipeline config overrides (JSON string)",
+                    },
+                },
+            },
+        },
+    },
+    description="Content to analyze — provide text, an image, a media URL, or a combination",
+)
+@openapi.tag("Analysis")
+@openapi.response(200, description="SSE stream of progress updates and final result")
+@openapi.response(400, description="Missing content/image or invalid media URL")
 async def analyze_endpoint(request):
     """Receives content from UI, runs the moderation pipeline, and streams back progress.
     
