@@ -12,6 +12,10 @@ const resultContent = document.getElementById("resultContent");
 const progressStepper = document.getElementById("progressStepper");
 const statusMessage = document.getElementById("statusMessage");
 const footer = document.getElementById("footer");
+const urlToggleBtn = document.getElementById("urlToggleBtn");
+const mediaUrlRow = document.getElementById("mediaUrlRow");
+const mediaUrlInput = document.getElementById("mediaUrlInput");
+const mediaUrlClear = document.getElementById("mediaUrlClear");
 
 let hasResult = false;
 let currentAbortController = null;
@@ -46,23 +50,59 @@ settingsToggleBtn.addEventListener("click", () => {
   }
 });
 
-imageInput.addEventListener("change", (e) => {
-  const file = e.target.files[0];
-  if (file) {
-    selectedFile = file;
-    const reader = new FileReader();
-    reader.onload = (re) => {
-      imagePreview.style.display = "block";
-      imagePreview.innerHTML = `
-        <img src="${re.target.result}" alt="Preview">
-        <button class="remove-img-btn" onclick="removeImage()">✕</button>
-      `;
-    };
-    reader.readAsDataURL(file);
+// URL toggle
+urlToggleBtn.addEventListener("click", () => {
+  if (mediaUrlRow.style.display === "none") {
+    mediaUrlRow.style.display = "flex";
+    urlToggleBtn.classList.add("active");
+    mediaUrlInput.focus();
+  } else {
+    mediaUrlRow.style.display = "none";
+    urlToggleBtn.classList.remove("active");
+    mediaUrlInput.value = "";
   }
 });
 
-window.removeImage = function() {
+mediaUrlClear.addEventListener("click", () => {
+  mediaUrlInput.value = "";
+  mediaUrlInput.focus();
+});
+
+imageInput.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    showImagePreview(file);
+  }
+});
+
+// Clipboard paste support — paste images directly into the textarea
+searchInput.addEventListener("paste", (e) => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith("image/")) {
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (file) showImagePreview(file);
+      return;
+    }
+  }
+});
+
+function showImagePreview(file) {
+  selectedFile = file;
+  const reader = new FileReader();
+  reader.onload = (re) => {
+    imagePreview.style.display = "block";
+    imagePreview.innerHTML = `
+      <img src="${re.target.result}" alt="Preview">
+      <button class="remove-img-btn" onclick="removeImage()">✕</button>
+    `;
+  };
+  reader.readAsDataURL(file);
+}
+
+window.removeImage = function () {
   selectedFile = null;
   imageInput.value = "";
   imagePreview.style.display = "none";
@@ -137,15 +177,15 @@ function renderFinalResult(data) {
 
     // Aggregate all segments
     let allSegments = [];
-    data.law_analysis.forEach(law => {
+    data.law_analysis.forEach((law) => {
       if (law.segments) {
-        law.segments.forEach(seg => {
+        law.segments.forEach((seg) => {
           allSegments.push({
             start: seg.start,
             end: seg.end,
             score: seg.score,
             reason: seg.reason,
-            pasal: law.pasal
+            pasal: law.pasal,
           });
         });
       }
@@ -159,26 +199,30 @@ function renderFinalResult(data) {
     } else {
       // Create non-overlapping boundaries
       let boundaries = new Set([0, contentInput.length]);
-      allSegments.forEach(seg => {
+      allSegments.forEach((seg) => {
         boundaries.add(seg.start);
         boundaries.add(seg.end);
       });
-      let sortedBounds = Array.from(boundaries).sort((a,b) => a-b);
-      
+      let sortedBounds = Array.from(boundaries).sort((a, b) => a - b);
+
       let html = "";
       for (let i = 0; i < sortedBounds.length - 1; i++) {
         let spanStart = sortedBounds[i];
-        let spanEnd = sortedBounds[i+1];
+        let spanEnd = sortedBounds[i + 1];
         let textChunk = contentInput.substring(spanStart, spanEnd);
-        
+
         // Find segments covering this chunk
-        let coveringSegs = allSegments.filter(s => s.start <= spanStart && s.end >= spanEnd);
+        let coveringSegs = allSegments.filter(
+          (s) => s.start <= spanStart && s.end >= spanEnd,
+        );
         if (coveringSegs.length > 0) {
           // Take the highest score
-          let maxScore = Math.max(...coveringSegs.map(s => s.score));
-          let bestSeg = coveringSegs.find(s => s.score === maxScore);
+          let maxScore = Math.max(...coveringSegs.map((s) => s.score));
+          let bestSeg = coveringSegs.find((s) => s.score === maxScore);
           let tooltip = `Pasal: ${bestSeg.pasal}\nCertainty: ${bestSeg.score}/N\nReason: ${bestSeg.reason}`;
-          html += `<span class="highlight-segment" data-score="${maxScore}" data-law-tooltip="${escapeHtml(tooltip)}">${escapeHtml(textChunk)}</span>`;
+          html += `<span class="highlight-segment" data-score="${maxScore}" data-law-tooltip="${escapeHtml(
+            tooltip,
+          )}">${escapeHtml(textChunk)}</span>`;
         } else {
           html += escapeHtml(textChunk);
         }
@@ -197,20 +241,27 @@ function renderFinalResult(data) {
 
     const panel = document.createElement("div");
     panel.className = "laws-panel";
-    
+
     // Check if we have detailed law_analysis
     if (data.law_analysis && data.law_analysis.length > 0) {
-      data.law_analysis.forEach(law => {
+      data.law_analysis.forEach((law) => {
         const item = document.createElement("div");
         item.className = "law-analysis-item";
-        
+
         let htmlContext = `<h4>${escapeHtml(law.pasal)}</h4>`;
-        htmlContext += `<p class="overall-reason">${escapeHtml(law.overall_reason || "")}</p>`;
-        
-        if (law.clustered_reason_counts && Object.keys(law.clustered_reason_counts).length > 0) {
+        htmlContext += `<p class="overall-reason">${escapeHtml(
+          law.overall_reason || "",
+        )}</p>`;
+
+        if (
+          law.clustered_reason_counts &&
+          Object.keys(law.clustered_reason_counts).length > 0
+        ) {
           htmlContext += `<ul class="image-reasons-list">`;
           Object.entries(law.clustered_reason_counts).forEach(([r, count]) => {
-             htmlContext += `<li>${escapeHtml(r)} <strong>(votes: ${count})</strong></li>`;
+            htmlContext += `<li>${escapeHtml(
+              r,
+            )} <strong>(votes: ${count})</strong></li>`;
           });
           htmlContext += `</ul>`;
         }
@@ -220,7 +271,7 @@ function renderFinalResult(data) {
     } else {
       panel.innerHTML = processMarkdown(data.laws_summary);
     }
-    
+
     card.appendChild(panel);
   }
 
@@ -235,10 +286,10 @@ function renderFinalResult(data) {
     panel.className = "fact-check-panel";
 
     const statusText = document.createElement("p");
-    if (data.fact_check.verified === true) {
+    if (data.fact_check.status?.toLowerCase() === "true") {
       statusText.innerHTML = "<strong>Status:</strong> Terverifikasi Fakta";
       statusText.style.color = "#4ade80";
-    } else if (data.fact_check.verified === false) {
+    } else if (data.fact_check.status?.toLowerCase() === "false") {
       statusText.innerHTML = "<strong>Status:</strong> Terbukti Hoaks / Salah";
       statusText.style.color = "var(--red)";
     } else {
@@ -295,14 +346,15 @@ function mapStage(stage) {
     law_retrieval: "Yurisprudensi",
     processing: "Analisis",
     done: "Selesai",
-    error: "Error"
+    error: "Error",
   };
   return map[stage] || stage;
 }
 
 async function doAnalyze() {
   const content = searchInput.value.trim();
-  if (!content && !selectedFile) return;
+  const mediaUrl = mediaUrlInput.value.trim();
+  if (!content && !selectedFile && !mediaUrl) return;
 
   if (currentAbortController) {
     currentAbortController.abort();
@@ -324,26 +376,45 @@ async function doAnalyze() {
     if (selectedFile) {
       formData.append("image", selectedFile);
     }
-    
+
+    // Include media URL if provided
+    if (mediaUrl && !selectedFile) {
+      formData.append("media_url", mediaUrl);
+    }
+
     // Read config overrides
     const configData = {};
-    const cfgClassifierModel = document.getElementById('cfgClassifierModel').value.trim();
-    if(cfgClassifierModel) configData.classifier_model_name = cfgClassifierModel;
-    
-    const cfgFactCheckerModel = document.getElementById('cfgFactCheckerModel').value.trim();
-    if(cfgFactCheckerModel) configData.fact_checker_model_name = cfgFactCheckerModel;
+    const cfgClassifierModel = document
+      .getElementById("cfgClassifierModel")
+      .value.trim();
+    if (cfgClassifierModel)
+      configData.classifier_model_name = cfgClassifierModel;
 
-    const cfgLawRetrieverModel = document.getElementById('cfgLawRetrieverModel').value.trim();
-    if(cfgLawRetrieverModel) configData.law_retriever_model_name = cfgLawRetrieverModel;
+    const cfgFactCheckerModel = document
+      .getElementById("cfgFactCheckerModel")
+      .value.trim();
+    if (cfgFactCheckerModel)
+      configData.fact_checker_model_name = cfgFactCheckerModel;
 
-    const cfgFactLoops = document.getElementById('cfgFactLoops').value;
-    if(cfgFactLoops) configData.fact_checker_max_loops = parseInt(cfgFactLoops);
-    
-    const cfgClassifierSamples = document.getElementById('cfgClassifierSamples').value;
-    if(cfgClassifierSamples) configData.classifier_n_samples = parseInt(cfgClassifierSamples);
-    
-    const cfgFactSamples = document.getElementById('cfgFactSamples').value;
-    if(cfgFactSamples) configData.fact_checker_n_samples = parseInt(cfgFactSamples);
+    const cfgLawRetrieverModel = document
+      .getElementById("cfgLawRetrieverModel")
+      .value.trim();
+    if (cfgLawRetrieverModel)
+      configData.law_retriever_model_name = cfgLawRetrieverModel;
+
+    const cfgFactLoops = document.getElementById("cfgFactLoops").value;
+    if (cfgFactLoops)
+      configData.fact_checker_max_loops = parseInt(cfgFactLoops);
+
+    const cfgClassifierSamples = document.getElementById(
+      "cfgClassifierSamples",
+    ).value;
+    if (cfgClassifierSamples)
+      configData.classifier_n_samples = parseInt(cfgClassifierSamples);
+
+    const cfgFactSamples = document.getElementById("cfgFactSamples").value;
+    if (cfgFactSamples)
+      configData.fact_checker_n_samples = parseInt(cfgFactSamples);
 
     if (Object.keys(configData).length > 0) {
       formData.append("config", JSON.stringify(configData));
@@ -377,7 +448,9 @@ async function doAnalyze() {
             const payload = JSON.parse(line.substring(6));
             if (payload.type === "progress") {
               const { stage, message } = payload.data;
-              const stageLabel = `<span class="stage-label">${mapStage(stage)}</span>`;
+              const stageLabel = `<span class="stage-label">${mapStage(
+                stage,
+              )}</span>`;
               statusMessage.innerHTML = `${stageLabel} ${escapeHtml(message)}`;
             } else if (payload.type === "result") {
               progressStepper.style.display = "none";
@@ -410,4 +483,3 @@ searchInput.addEventListener("keydown", (e) => {
 });
 
 searchInput.focus();
-

@@ -425,6 +425,59 @@ body::before {
   transform: scale(1.1);
 }
 
+/* ── Media URL Input Row ── */
+.media-url-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.7rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  animation: slideDown 0.25s ease forwards;
+}
+
+.media-url-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.media-url-row input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.85rem;
+  caret-color: var(--pink);
+}
+
+.media-url-row input::placeholder {
+  color: var(--text-muted);
+}
+
+.media-url-clear {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0 0.3rem;
+  line-height: 1;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.media-url-clear:hover {
+  color: var(--red);
+  background: rgba(232, 54, 78, 0.1);
+}
+
 /* ── Result Area ── */
 .result-area {
   position: relative;

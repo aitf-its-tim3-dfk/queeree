@@ -4,17 +4,15 @@ from pydantic import BaseModel
 from typing import Optional
 
 # Base Configuration
-GLOBAL_MODEL_NAME = "qwen/qwen3.5-122b-a10b"
+GLOBAL_MODEL_NAME = "qwen/qwen3.5-27b"
 
 DEFAULT_CONFIG = {
     "classifier_model_name": GLOBAL_MODEL_NAME,
     "fact_checker_model_name": GLOBAL_MODEL_NAME,
-    "law_retriever_model_name": GLOBAL_MODEL_NAME,
-    "embedding_model_name": "perplexity-ai/pplx-embed-v1-0.6B",
     "classifier_n_samples": 5,
     "fact_checker_n_samples": 3,
     "fact_checker_max_loops": 3,
-    "max_completion_tokens": 4096,
+    "max_completion_tokens": 2048,
     "reasoning_effort": "low",
     "verbose_logging": os.getenv("VERBOSE_LOGGING", "false").lower() == "true",
 }
@@ -24,8 +22,6 @@ DEFAULT_CONFIG = {
 class PipelineConfig(BaseModel):
     classifier_model_name: Optional[str] = None
     fact_checker_model_name: Optional[str] = None
-    law_retriever_model_name: Optional[str] = None
-    embedding_model_name: Optional[str] = None
 
     classifier_n_samples: Optional[int] = None
     fact_checker_n_samples: Optional[int] = None
@@ -34,7 +30,6 @@ class PipelineConfig(BaseModel):
     reasoning_effort: Optional[str] = None
     classifier_reasoning_effort: Optional[str] = None
     fact_checker_reasoning_effort: Optional[str] = None
-    law_retriever_reasoning_effort: Optional[str] = None
     verbose_logging: Optional[bool] = None
 
 
@@ -71,16 +66,6 @@ def CLASSIFIER_MODEL_NAME():
 @property
 def FACT_CHECKER_MODEL_NAME():
     return get_config_val("fact_checker_model_name")
-
-
-@property
-def LAW_RETRIEVER_MODEL_NAME():
-    return get_config_val("law_retriever_model_name")
-
-
-@property
-def EMBEDDING_MODEL_NAME():
-    return get_config_val("embedding_model_name")
 
 
 @property

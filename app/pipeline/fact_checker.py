@@ -12,6 +12,7 @@ from .prompts import (
     construct_grounded_prompt,
 )
 from .retrieval import RetrievalQueue
+from .reranker import rerank
 import config
 
 
@@ -23,7 +24,10 @@ async def _check_sufficiency_single(
             response = await client.chat.completions.create(
                 model=config.get_config_val("fact_checker_model_name"),
                 messages=[
-                    {"role": "system", "content": construct_grounded_prompt(SUFFICIENCY_PROMPT)},
+                    {
+                        "role": "system",
+                        "content": construct_grounded_prompt(SUFFICIENCY_PROMPT),
+                    },
                     {
                         "role": "user",
                         "content": f"Claim:\n{content}\n\nSearch Results:\n{results_context}",
@@ -64,7 +68,12 @@ async def _check_sufficiency_single(
                 raise ValueError("Model returned None content")
 
             reply = content_str.strip()
-            return json.loads(reply)
+            data = json.loads(reply)
+            if not isinstance(data, dict):
+                raise ValueError(
+                    f"Expected dict from LLM, got {type(data).__name__}: {data}"
+                )
+            return data
         except Exception as e:
             print(f"Sufficiency check attempt {attempt+1} error: {e}")
             if attempt == 2:
@@ -132,7 +141,10 @@ async def _check_reasoning_single(client: AsyncOpenAI, content: str) -> Dict[str
             response = await client.chat.completions.create(
                 model=config.get_config_val("fact_checker_model_name"),
                 messages=[
-                    {"role": "system", "content": construct_grounded_prompt(PURE_REASONING_PROMPT)},
+                    {
+                        "role": "system",
+                        "content": construct_grounded_prompt(PURE_REASONING_PROMPT),
+                    },
                     {"role": "user", "content": f"Claim:\n{content}"},
                 ],
                 response_format={
@@ -163,7 +175,12 @@ async def _check_reasoning_single(client: AsyncOpenAI, content: str) -> Dict[str
                 raise ValueError("Model returned None content")
 
             reply = content_str.strip()
-            return json.loads(reply)
+            data = json.loads(reply)
+            if not isinstance(data, dict):
+                raise ValueError(
+                    f"Expected dict from LLM, got {type(data).__name__}: {data}"
+                )
+            return data
         except Exception as e:
             if attempt == 2:
                 return {
@@ -273,6 +290,13 @@ async def run_search_path_iterative(
     query = await generate_query(client, initial_prompt, content)
 
     max_loops = config.get_config_val("fact_checker_max_loops") or 1
+    # Fallback
+    eval_result = {
+        "status": "UNVERIFIED",
+        "mean": 50,
+        "sufficient": False,
+        "reasoning": "No search iterations performed.",
+    }
     for loop in range(max_loops):
         if emit_progress:
             await emit_progress(
@@ -285,23 +309,36 @@ async def run_search_path_iterative(
             results = []
 
         if not results:
-            scratchpad.append(f"Q: {query} -> A: No results found.")
-            results_context = "No search results returned."
+            scratchpad.append(
+                f'Iteration {loop+1} — Query: "{query}"\n'
+                f"  Result: No results found."
+            )
         else:
-            top_results = results[:4]
+            # Rerank results by relevance to the claim
+            top_results = await rerank(query, results, top_k=4)
             current_urls = {s["url"] for s in accumulated_sources}
             for r in top_results:
                 if r["url"] not in current_urls:
                     accumulated_sources.append(r)
                     current_urls.add(r["url"])
 
-            results_context = "\n\n".join(
+            result_summaries = "; ".join([f"\"{r['title']}\"" for r in top_results[:3]])
+            scratchpad.append(
+                f'Iteration {loop+1} — Query: "{query}"\n'
+                f"  Result: Found {len(results)} results. Top hits: {result_summaries}"
+            )
+
+        # Build results_context from ALL accumulated sources, not just current batch
+        results_context = (
+            "\n\n".join(
                 [
                     f"[{i+1}] {r['title']}\n{r['description']}\n(Source: {r['url']})"
-                    for i, r in enumerate(top_results)
+                    for i, r in enumerate(accumulated_sources)
                 ]
             )
-            scratchpad.append(f"Q: {query} -> Found {len(results)} results.")
+            if accumulated_sources
+            else "No search results returned."
+        )
 
         if emit_progress:
             await emit_progress(
@@ -322,6 +359,10 @@ async def run_search_path_iterative(
                 await emit_progress(
                     f"[{path_name}] Bukti belum cukup (Iterasi {loop+1}). Menyaring kueri..."
                 )
+            # Feed sufficiency reasoning back so the LLM knows why evidence was lacking
+            insufficiency_reason = eval_result.get("reasoning", "Unknown")
+            scratchpad.append(f"  → Insufficient because: {insufficiency_reason}")
+
             refine_context = (
                 f"Original Claim:\n{content}\n\nPast queries and results:\n"
                 + "\n".join(scratchpad)
@@ -375,33 +416,91 @@ async def fact_check(
     final_reasoning = ""
     mean_score = 50.0
 
-    # Decision logic
-    if p1["sufficient"] and p1["status"] in ["TRUE", "FALSE"]:
+    # Decision logic with conflict reconciliation
+    p1_decided = p1["sufficient"] and p1["status"] in ["TRUE", "FALSE"]
+    p2_decided = p2["sufficient"] and p2["status"] in ["TRUE", "FALSE"]
+
+    # Both paths agree or only one decided
+    # But check if reasoning path strongly disagrees (authenticity concern)
+    decided = False
+    if p1_decided and p2_decided and p1["status"] == p2["status"]:
+        search_mean = (p1["mean"] + p2["mean"]) / 2.0
+        reasoning_mean = p3["mean"]
+        if abs(search_mean - reasoning_mean) > 40:
+            # Reasoning path strongly disagrees, don't auto-accept, fall through to combined eval
+            if emit_progress:
+                await emit_progress(
+                    f"Jalur logika internal sangat berbeda (skor {reasoning_mean:.0f} vs {search_mean:.0f}). Mengevaluasi ulang..."
+                )
+        else:
+            final_status = p1["status"]
+            final_reasoning = f"(Kedua jalur pencarian sepakat)\n{p1['reasoning']}"
+            mean_score = search_mean
+            decided = True
+    elif p1_decided and not p2_decided:
         final_status = p1["status"]
         final_reasoning = f"(Berdasarkan Pencarian Bukti Standar)\n{p1['reasoning']}"
         mean_score = p1["mean"]
-    elif p2["sufficient"] and p2["status"] in ["TRUE", "FALSE"]:
+        decided = True
+    elif p2_decided and not p1_decided:
         final_status = p2["status"]
         final_reasoning = (
             f"(Berdasarkan Pencarian Bukti Kontradiktif)\n{p2['reasoning']}"
         )
         mean_score = p2["mean"]
-    elif p3["status"] in ["TRUE", "FALSE"]:
-        final_status = p3["status"]
-        final_reasoning = (
-            f"(Berdasarkan Konsistensi Logis Internal Model)\n{p3['reasoning']}"
-        )
-        mean_score = p3["mean"]
-    else:
-        final_status = "UNVERIFIED"
-        final_reasoning = (
-            f"Bukti eksternal tidak cukup dan logika dasar menghasilkan probabilitas ragu-ragu.\n\n"
-            f"Standar: {p1['reasoning']}\n\n"
-            f"Kontradiksi: {p2['reasoning']}\n\n"
-            f"Logika Internal: {p3['reasoning']}"
-        )
-        # Average the unverified scores just to have a number
-        mean_score = (p1["mean"] + p2["mean"] + p3["mean"]) / 3.0
+        decided = True
+    if not decided:
+        # Conflict, reasoning divergence, or both inconclusive, run combined sufficiency on pooled evidence
+        if unique_sources:
+            if emit_progress:
+                await emit_progress(
+                    "Jalur pencarian tidak konklusif. Mengevaluasi seluruh bukti gabungan..."
+                )
+
+            combined_context = "\n\n".join(
+                [
+                    f"[{i+1}] {r['title']}\n{r['description']}\n(Source: {r['url']})"
+                    for i, r in enumerate(unique_sources)
+                ]
+            )
+            combined_eval = await check_sufficiency(client, content, combined_context)
+
+            combined_status = combined_eval.get("status")
+            if combined_status in ["TRUE", "FALSE"]:
+                final_status = combined_status
+                final_reasoning = (
+                    f"(Berdasarkan Evaluasi Bukti Gabungan — {len(unique_sources)} sumber)\n"
+                    f"{combined_eval['reasoning']}"
+                )
+                mean_score = combined_eval["mean"]
+            elif p3["status"] in ["TRUE", "FALSE"]:
+                # Combined still inconclusive, fall back to reasoning path
+                final_status = p3["status"]
+                final_reasoning = (
+                    f"(Berdasarkan Konsistensi Logis Internal Model)\n{p3['reasoning']}"
+                )
+                mean_score = p3["mean"]
+            else:
+                final_status = "UNVERIFIED"
+                final_reasoning = (
+                    f"Bukti gabungan dan logika dasar tidak cukup untuk memutuskan.\n\n"
+                    f"Evaluasi Gabungan: {combined_eval.get('reasoning', '')}\n\n"
+                    f"Logika Internal: {p3['reasoning']}"
+                )
+                mean_score = (combined_eval["mean"] + p3["mean"]) / 2.0
+        elif p3["status"] in ["TRUE", "FALSE"]:
+            final_status = p3["status"]
+            final_reasoning = (
+                f"(Berdasarkan Konsistensi Logis Internal Model)\n{p3['reasoning']}"
+            )
+            mean_score = p3["mean"]
+        else:
+            final_status = "UNVERIFIED"
+            final_reasoning = (
+                f"Tidak ada bukti eksternal dan logika dasar menghasilkan probabilitas ragu-ragu.\n\n"
+                f"Logika Internal: {p3['reasoning']}"
+            )
+            mean_score = p3["mean"]
 
     if emit_progress:
         await emit_progress(

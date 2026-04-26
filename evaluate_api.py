@@ -55,10 +55,16 @@ def normalize_categories(cat_str):
     if not cat_str or pd.isna(cat_str) or str(cat_str).lower() == "nan":
         return []
 
-    # Mapping rules for normalization
+    # Mapping rules for normalization to the 3 final categories
     mapping = {
-        "fitnah": "Penghinaan",
-        "hasutan": "Provokasi",
+        "fitnah": "Fitnah",
+        "penghinaan": "Fitnah",
+        "hasutan": "Ujaran Kebencian",
+        "provokasi": "Ujaran Kebencian",
+        "sara": "Ujaran Kebencian",
+        "hoaks": "Disinformasi",
+        "misinformasi": "Disinformasi",
+        "penistaan agama": "Ujaran Kebencian",
     }
 
     # Split by common delimiters
@@ -217,8 +223,6 @@ async def main_async():
     ref_analysis = []
     cand_analysis = []
 
-    ref_laws = []
-    cand_laws = []
 
     for i, (idx, row) in enumerate(df.iterrows()):
         result = raw_results[i]
@@ -259,15 +263,9 @@ async def main_async():
 
         pred_analysis = result.get("final_summary", "")
 
-        gt_hukum = str(row.get("Dasar Hukum", "")) if pd.notna(row.get("Dasar Hukum")) else ""
-        gt_hukum = gt_hukum.strip()
-        pred_hukum = str(result.get("laws_summary", "")).strip()
 
         ref_analysis.append(gt_analysis)
         cand_analysis.append(pred_analysis)
-
-        ref_laws.append(gt_hukum)
-        cand_laws.append(pred_hukum)
 
     print("\n" + "=" * 50)
     print("CLASSIFICATION METRICS")
@@ -337,16 +335,6 @@ async def main_async():
         else:
             log_print("No analysis text to evaluate.")
 
-        log_print("\nCalculating BERTScore for Laws (Dasar Hukum vs Laws Summary)...")
-        if len(cand_laws) > 0:
-            P_law, R_law, F1_law = bert_score_fn(
-                cand_laws, ref_laws, lang="id", verbose=True
-            )
-            log_print(
-                f"Laws BERTScore     -> Precision: {P_law.mean():.4f}, Recall: {R_law.mean():.4f}, F1: {F1_law.mean():.4f}"
-            )
-        else:
-            log_print("No law text to evaluate.")
 
         log_print("\nEvaluation Complete.")
         print(f"\nMetrics saved to {metrics_log_path}")

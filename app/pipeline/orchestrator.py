@@ -5,7 +5,6 @@ from typing import Dict, Any, Callable
 
 # Import pipeline components
 from .classifier import classify_content
-from .law_retriever import retrieve_laws
 from .fact_checker import fact_check
 from .retrieval import RetrievalQueue, search_queue
 
@@ -22,7 +21,7 @@ async def generate_final_summary(client: AsyncOpenAI, user_content: str, pipelin
     for attempt in range(3):
         try:
             res = await client.chat.completions.create(
-                model=config.get_config_val("law_retriever_model_name"),
+                model=config.get_config_val("classifier_model_name"),
                 messages=[
                     {"role": "system", "content": construct_grounded_prompt(PIPELINE_SUMMARY_PROMPT)},
                     {"role": "user", "content": context},
@@ -44,7 +43,7 @@ async def generate_final_summary(client: AsyncOpenAI, user_content: str, pipelin
                 },
                 temperature=0.3,
                 max_completion_tokens=config.get_config_val("max_completion_tokens"),
-                **config.get_llm_kwargs("law_retriever"),
+                **config.get_llm_kwargs("classifier"),
             )
             content_str = res.choices[0].message.content
             if config.get_config_val("verbose_logging"):
@@ -143,7 +142,6 @@ async def analyze_content(
     """
     result = {
         "categories": [],
-        "laws_summary": "",
         "fact_check": None,
         "is_flagged": False,
     }
@@ -174,8 +172,9 @@ async def analyze_content(
         result["category_votes"] = category_counts
 
         if not categories and not needs_verification:
+            result["label"] = "Netral"
             if emit_progress:
-                await emit_progress({"stage": "done", "message": "Selesai: Aman."})
+                await emit_progress({"stage": "done", "message": "Selesai: Netral."})
             return result
 
         result["is_flagged"] = True
@@ -202,48 +201,20 @@ async def analyze_content(
                 if intent_cat not in categories:
                     categories.append(intent_cat)
             elif status == "UNVERIFIED":
-                if "Misinformasi" not in categories:
-                    categories.append("Misinformasi")
+                if "Disinformasi" not in categories:
+                    categories.append("Disinformasi")
             # If TRUE, we don't add any misinformation categories.
             
         result["categories"] = categories
 
         # Double check if categories is actually empty after fact check
         if not categories:
+            result["label"] = "Fakta"
             if emit_progress:
                 await emit_progress({"stage": "done", "message": "Selesai: Fakta terverifikasi, konten aman."})
             result["is_flagged"] = False
             return result
 
-        # Step 3: Law Retrieval
-        if emit_progress:
-            await emit_progress(
-                {
-                    "stage": "processing",
-                    "message": f"Kategori final: {', '.join(categories)}. Mengumpulkan dasar hukum...",
-                }
-            )
-
-        laws_data = await retrieve_laws(
-            client, content, categories, emit_progress=emit_progress
-        )
-        summary = laws_data.get("summary", "")
-        articles = laws_data.get("articles", [])
-        
-        analyzed_laws = []
-        if articles:
-            from .law_analyzer import analyze_multimodal_laws
-            analyzed_laws = await analyze_multimodal_laws(
-                client, 
-                content, 
-                articles, 
-                emit_progress, 
-                image_data=image_data, 
-                fact_check_result=result.get("fact_check")
-            )
-                
-        result["laws_summary"] = summary
-        result["law_analysis"] = analyzed_laws
 
         if emit_progress:
             await emit_progress({"stage": "processing", "message": "Menyusun ringkasan akhir..."})

@@ -1,4 +1,5 @@
 sanic
+sanic-ext
 python-dotenv
 openai
 httpx

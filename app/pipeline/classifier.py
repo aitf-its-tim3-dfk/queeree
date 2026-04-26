@@ -122,16 +122,9 @@ async def classify_content(
     final_needs_verification = verification_votes >= threshold
 
     allowed = {
-        "Provokasi",
-        "SARA",
-        "Separatisme",
+        "Disinformasi",
+        "Fitnah",
         "Ujaran Kebencian",
-        "Penghinaan",
-        "Makar",
-        "Ancaman",
-        "Pelanggaran Keamanan Informasi",
-        "Kekerasan",
-        "Penistaan Agama",
     }
 
     return [c for c in final_categories if c in allowed], final_needs_verification, category_counts
