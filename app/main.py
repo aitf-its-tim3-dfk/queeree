@@ -2,6 +2,7 @@ import os
 import json
 import asyncio
 import mimetypes
+import httpx
 from sanic import Sanic
 from sanic.worker.manager import WorkerManager
 from sanic.response import json as json_response, file
@@ -19,6 +20,37 @@ WorkerManager.THRESHOLD = 900
 app = Sanic("OpenRouterApp")
 app.config.RESPONSE_TIMEOUT = 900
 app.config.KEEP_ALIVE_TIMEOUT = 900
+
+MEDIA_FETCH_TIMEOUT = 30  # seconds
+MAX_MEDIA_SIZE = 20 * 1024 * 1024  # 20 MB
+
+
+async def fetch_media_from_url(url: str) -> dict | None:
+    """Download media from a URL and return an image_data dict compatible with the pipeline."""
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=MEDIA_FETCH_TIMEOUT) as http:
+            resp = await http.get(url)
+            resp.raise_for_status()
+
+            content_length = resp.headers.get("content-length")
+            if content_length and int(content_length) > MAX_MEDIA_SIZE:
+                raise ValueError(f"Media too large ({int(content_length)} bytes, max {MAX_MEDIA_SIZE})")
+
+            media_bytes = resp.content
+            if len(media_bytes) > MAX_MEDIA_SIZE:
+                raise ValueError(f"Media too large ({len(media_bytes)} bytes, max {MAX_MEDIA_SIZE})")
+
+            # Determine MIME type: prefer Content-Type header, fall back to URL guessing
+            mime_type = resp.headers.get("content-type", "").split(";")[0].strip()
+            if not mime_type or mime_type == "application/octet-stream":
+                guessed, _ = mimetypes.guess_type(url.split("?")[0])
+                mime_type = guessed or "image/jpeg"
+
+            return {"bytes": media_bytes, "mime_type": mime_type}
+    except httpx.HTTPStatusError as e:
+        raise ValueError(f"Failed to fetch media: HTTP {e.response.status_code}") from e
+    except httpx.RequestError as e:
+        raise ValueError(f"Failed to fetch media: {e}") from e
 
 # Serve the static UI files (HTML, CSS, JS)
 app.static("/static", "./static")
@@ -55,13 +87,18 @@ async def index(request):
 
 @app.post("/api/analyze")
 async def analyze_endpoint(request):
-    """Receives content from UI, runs the moderation pipeline, and streams back progress."""
+    """Receives content from UI, runs the moderation pipeline, and streams back progress.
+    
+    Accepts an optional `media_url` field — when provided (and no file is uploaded),
+    the server will fetch the media from that URL automatically.
+    """
     # Support both JSON and Multipart Form Data
     content_type = request.content_type or ""
     if content_type.startswith("multipart/form-data") or content_type.startswith(
         "application/x-www-form-urlencoded"
     ):
         content = request.form.get("content", "")
+        media_url = request.form.get("media_url", "")
         image_file = request.files.get("image")
         image_data = None
         if image_file:
@@ -79,6 +116,11 @@ async def analyze_endpoint(request):
                 "bytes": image_file.body,
                 "mime_type": mime_type,
             }
+        elif media_url:
+            try:
+                image_data = await fetch_media_from_url(media_url)
+            except ValueError as e:
+                return json_response({"error": str(e)}, status=400)
 
         config_str = request.form.get("config", "{}")
         try:
@@ -92,8 +134,15 @@ async def analyze_endpoint(request):
         except Exception:
             data = {}
         content = data.get("content", "")
+        media_url = data.get("media_url", "")
         image_data = None
         config_data = data.get("config", {})
+
+        if media_url and not image_data:
+            try:
+                image_data = await fetch_media_from_url(media_url)
+            except ValueError as e:
+                return json_response({"error": str(e)}, status=400)
 
     if not content and not image_data:
         return json_response({"error": "Content or image is required"}, status=400)

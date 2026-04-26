@@ -12,6 +12,10 @@ const resultContent = document.getElementById("resultContent");
 const progressStepper = document.getElementById("progressStepper");
 const statusMessage = document.getElementById("statusMessage");
 const footer = document.getElementById("footer");
+const urlToggleBtn = document.getElementById("urlToggleBtn");
+const mediaUrlRow = document.getElementById("mediaUrlRow");
+const mediaUrlInput = document.getElementById("mediaUrlInput");
+const mediaUrlClear = document.getElementById("mediaUrlClear");
 
 let hasResult = false;
 let currentAbortController = null;
@@ -46,21 +50,57 @@ settingsToggleBtn.addEventListener("click", () => {
   }
 });
 
+// URL toggle
+urlToggleBtn.addEventListener("click", () => {
+  if (mediaUrlRow.style.display === "none") {
+    mediaUrlRow.style.display = "flex";
+    urlToggleBtn.classList.add("active");
+    mediaUrlInput.focus();
+  } else {
+    mediaUrlRow.style.display = "none";
+    urlToggleBtn.classList.remove("active");
+    mediaUrlInput.value = "";
+  }
+});
+
+mediaUrlClear.addEventListener("click", () => {
+  mediaUrlInput.value = "";
+  mediaUrlInput.focus();
+});
+
 imageInput.addEventListener("change", (e) => {
   const file = e.target.files[0];
   if (file) {
-    selectedFile = file;
-    const reader = new FileReader();
-    reader.onload = (re) => {
-      imagePreview.style.display = "block";
-      imagePreview.innerHTML = `
-        <img src="${re.target.result}" alt="Preview">
-        <button class="remove-img-btn" onclick="removeImage()">✕</button>
-      `;
-    };
-    reader.readAsDataURL(file);
+    showImagePreview(file);
   }
 });
+
+// Clipboard paste support — paste images directly into the textarea
+searchInput.addEventListener("paste", (e) => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith("image/")) {
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (file) showImagePreview(file);
+      return;
+    }
+  }
+});
+
+function showImagePreview(file) {
+  selectedFile = file;
+  const reader = new FileReader();
+  reader.onload = (re) => {
+    imagePreview.style.display = "block";
+    imagePreview.innerHTML = `
+      <img src="${re.target.result}" alt="Preview">
+      <button class="remove-img-btn" onclick="removeImage()">✕</button>
+    `;
+  };
+  reader.readAsDataURL(file);
+}
 
 window.removeImage = function () {
   selectedFile = null;
@@ -313,7 +353,8 @@ function mapStage(stage) {
 
 async function doAnalyze() {
   const content = searchInput.value.trim();
-  if (!content && !selectedFile) return;
+  const mediaUrl = mediaUrlInput.value.trim();
+  if (!content && !selectedFile && !mediaUrl) return;
 
   if (currentAbortController) {
     currentAbortController.abort();
@@ -334,6 +375,11 @@ async function doAnalyze() {
     formData.append("content", content);
     if (selectedFile) {
       formData.append("image", selectedFile);
+    }
+
+    // Include media URL if provided
+    if (mediaUrl && !selectedFile) {
+      formData.append("media_url", mediaUrl);
     }
 
     // Read config overrides
